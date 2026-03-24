@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ folder.name }} — IRIS-VE</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%236366f1'/><text x='50%25' y='55%25' font-size='18' text-anchor='middle' dominant-baseline='middle' fill='white'>I</text></svg>">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='iris-ve.css') }}">
+
+    <style>
+        /* ===== LAYOUT ===== */
+        .app-layout { display: flex; min-height: 100vh; }
+
+        /* ===== SIDEBAR ===== */
+        .sidebar {
+            width: 280px; flex-shrink: 0;
+            background: rgba(10, 14, 26, 0.88);
+            backdrop-filter: var(--iris-blur); -webkit-backdrop-filter: var(--iris-blur);
+            border-right: 1px solid var(--iris-border);
+            display: flex; flex-direction: column;
+            position: fixed; top: 0; left: 0; height: 100vh;
+            overflow-y: auto; z-index: 50;
+            transition: transform 0.3s var(--iris-ease);
+        }
+        [data-theme="light"] .sidebar { background: rgba(238, 242, 255, 0.92); }
+        .sidebar-header { padding: 22px 20px 18px; border-bottom: 1px solid var(--iris-border); }
+        .sidebar-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        .sidebar-brand-icon {
+            width: 38px; height: 38px; background: var(--iris-accent-grad);
+            border-radius: var(--iris-radius-sm); display: flex; align-items: center;
+            justify-content: center; font-size: 1.1rem; color: white;
+            box-shadow: 0 4px 12px rgba(99,102,241,0.4); flex-shrink: 0;
+        }
+        .sidebar-brand-text { font-size: 1.1875rem; font-weight: 800; letter-spacing: -0.02em; color: var(--iris-text-primary); }
+        .sidebar-brand-text span { background: var(--iris-accent-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .sidebar-nav { padding: 14px 12px; flex: 1; }
+        .sidebar-section-label {
+            font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--iris-text-muted);
+            padding: 0 8px; margin-bottom: 6px; margin-top: 14px;
+        }
+        .sidebar-section-label:first-child { margin-top: 0; }
+        .sidebar-link {
+            display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+            border-radius: var(--iris-radius-md); color: var(--iris-text-secondary);
+            text-decoration: none; font-size: 0.875rem; font-weight: 500;
+            transition: var(--iris-transition); cursor: pointer;
+            border: none; background: none; width: 100%; text-align: left;
+        }
+        .sidebar-link:hover, .sidebar-link.active { background: rgba(99,102,241,0.12); color: var(--iris-text-primary); }
+        .sidebar-link.active { color: var(--iris-accent-3); }
+        .sidebar-link i { font-size: 1.05rem; width: 20px; text-align: center; flex-shrink: 0; }
+        .sidebar-link.danger { color: var(--iris-danger); }
+        .sidebar-link.danger:hover { background: rgba(239,68,68,0.1); color: var(--iris-danger); }
+
+        .sidebar-enc-panel {
+            margin: 12px; background: rgba(245,158,11,0.08);
+            border: 1px solid rgba(245,158,11,0.2); border-radius: var(--iris-radius-md); padding: 12px;
+        }
+        .sidebar-enc-title {
+            font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--iris-warning); margin-bottom: 8px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .sidebar-enc-row {
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 0.8rem; padding: 3px 0; color: var(--iris-text-secondary);
+        }
+        .sidebar-enc-row span:last-child { font-weight: 600; color: var(--iris-text-primary); }
+        .sidebar-footer { padding: 10px 12px 14px; border-top: 1px solid var(--iris-border); }
+
+        /* ===== MAIN ===== */
+        .main-content { flex: 1; margin-left: 280px; display: flex; flex-direction: column; min-height: 100vh; }
+        .topbar {
+            position: sticky; top: 0; z-index: 40;
+            display: flex; align-items: center; gap: 12px; padding: 14px 28px;
+            background: rgba(10,14,26,0.78);
+            backdrop-filter: var(--iris-blur); -webkit-backdrop-filter: var(--iris-blur);
+            border-bottom: 1px solid var(--iris-border);
+        }
+        [data-theme="light"] .topbar { background: rgba(238,242,255,0.88); }
+        .topbar-title { font-size: 1.0625rem; font-weight: 700; color: var(--iris-text-primary); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .topbar-title a { color: var(--iris-text-muted); text-decoration: none; transition: color 0.2s; }
+        .topbar-title a:hover { color: var(--iris-text-primary); }
+        .topbar-title .sep { color: var(--iris-text-muted); font-weight: 400; margin: 0 6px; }
+        .content-area { padding: 28px; flex: 1; }
+
+        /* ===== LOCK SCREEN ===== */
+        .lock-screen {
+            display: flex; align-items: center; justify-content: center;
+            min-height: calc(100vh - 80px); padding: 40px 20px;
+        }
+        .lock-card {
+            background: var(--iris-bg-card);
+            backdrop-filter: var(--iris-blur); -webkit-backdrop-filter: var(--iris-blur);
+            border: 1px solid var(--iris-border); border-radius: var(--iris-radius-xl);
+            padding: 48px 40px; max-width: 420px; width: 100%; text-align: center;
+            position: relative; overflow: hidden;
+        }
+        .lock-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, var(--iris-warning) 0%, #f97316 100%);
+        }
+        .lock-icon {
+            width: 80px; height: 80px; background: rgba(245,158,11,0.12);
+            border: 1px solid rgba(245,158,11,0.25); border-radius: var(--iris-radius-xl);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2.25rem; color: var(--iris-warning); margin: 0 auto 24px;
+        }
+        .lock-title { font-size: 1.375rem; font-weight: 800; letter-spacing: -0.02em; color: var(--iris-text-primary); margin-bottom: 6px; }
+        .lock-subtitle { font-size: 0.875rem; color: var(--iris-text-muted); margin-bottom: 28px; }
+        .lock-error { color: var(--iris-danger); font-size: 0.8125rem; margin-top: 10px; display: none; }
+
+        /* ===== ENCRYPTED IDENTITY ===== */
+        .enc-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3);
+            color: var(--iris-warning); padding: 5px 14px; border-radius: var(--iris-radius-pill);
+            font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.02em; margin-bottom: 20px;
+        }
+
+        /* ===== FOLDER HEADER CARD ===== */
+        .folder-header-card {
+            background: var(--iris-bg-card);
+            backdrop-filter: var(--iris-blur); -webkit-backdrop-filter: var(--iris-blur);
+            border: 1px solid var(--iris-border); border-radius: var(--iris-radius-lg);
+            padding: 24px; margin-bottom: 20px; position: relative; overflow: hidden;
+            transition: var(--iris-transition);
+        }
+        .folder-header-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, var(--iris-warning) 0%, #f97316 100%);
+        }
+        .folder-header-card:hover {
+            background: var(--iris-bg-card-hover); border-color: rgba(245,158,11,0.2);
+            box-shadow: 0 12px 40px rgba(245,158,11,0.08), var(--iris-shadow);
+        }
+        .folder-header-inner { display: flex; align-items: center; gap: 20px; }
+        .folder-icon-enc {
+            width: 64px; height: 64px; background: rgba(245,158,11,0.15);
+            border: 1px solid rgba(245,158,11,0.25); border-radius: var(--iris-radius-lg);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.75rem; color: var(--iris-warning); flex-shrink: 0;
+        }
+        .folder-info { flex: 1; min-width: 0; }
+        .folder-name { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; color: var(--iris-text-primary); margin-bottom: 6px; }
+        .folder-meta-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; font-size: 0.8125rem; color: var(--iris-text-muted); }
+        .folder-meta-item { display: flex; align-items: center; gap: 5px; }
+        .folder-description { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--iris-border); font-size: 0.875rem; color: var(--iris-text-secondary); line-height: 1.6; }
+
+        /* ===== SECTION CARDS ===== */
+        .iris-section-card {
+            background: var(--iris-bg-card);
+            backdrop-filter: var(--iris-blur); -webkit-backdrop-filter: var(--iris-blur);
+            border: 1px solid var(--iris-border); border-radius: var(--iris-radius-lg);
+            padding: 20px; margin-bottom: 20px; transition: var(--iris-transition);
+        }
+        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 10px; }
+        .section-title { font-size: 0.9375rem; font-weight: 700; color: var(--iris-text-primary); display: flex; align-items: center; gap: 8px; }
+        .section-title i { color: var(--iris-accent); }
+        .content-viewer {
+            background: var(--iris-bg-input); border: 1px solid var(--iris-border);
+            border-radius: var(--iris-radius-md); padding: 16px; color: var(--iris-text-primary);
+            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.875rem;
+            line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; min-height: 120px;
+        }
+
+        /* ===== UPLOAD ZONE ===== */
+        .enc-upload-zone {
+            border: 2px dashed var(--iris-border); border-radius: var(--iris-radius-md);
+            padding: 32px 24px; text-align: center; background: var(--iris-bg-input);
+            cursor: pointer; transition: var(--iris-transition);
+        }
+        .enc-upload-zone:hover, .enc-upload-zone.drag-over {
+            border-color: var(--iris-warning); background: rgba(245,158,11,0.05); transform: translateY(-2px);
+        }
+        .enc-upload-icon { font-size: 2.25rem; color: var(--iris-warning); margin-bottom: 10px; opacity: 0.85; }
+        .enc-upload-label { font-size: 0.9375rem; font-weight: 600; color: var(--iris-text-primary); margin-bottom: 4px; }
+        .enc-upload-sub { font-size: 0.8rem; color: var(--iris-text-muted); }
+
+        /* ===== FILES GRID ===== */
+        .enc-files-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+        .enc-file-card {
+            background: var(--iris-bg-card); border: 1px solid var(--iris-border);
+            border-radius: var(--iris-radius-md); padding: 14px;
+            transition: var(--iris-transition); position: relative; overflow: hidden;
+        }
+        .enc-file-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: var(--iris-accent-grad); opacity: 0; transition: opacity 0.3s var(--iris-ease);
+        }
+        .enc-file-card:hover {
+            background: var(--iris-bg-card-hover); border-color: rgba(99,102,241,0.25);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 32px rgba(99,102,241,0.12), var(--iris-shadow);
+        }
+        .enc-file-card:hover::before { opacity: 1; }
+        .enc-file-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+        .enc-file-icon { width: 38px; height: 38px; border-radius: var(--iris-radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1.05rem; color: white; flex-shrink: 0; }
+        .eft-file-icon-doc     { background: linear-gradient(135deg, var(--iris-file-doc), #2563eb); }
+        .eft-file-icon-img     { background: linear-gradient(135deg, var(--iris-file-img), #059669); }
+        .eft-file-icon-video   { background: linear-gradient(135deg, var(--iris-file-video), #7c3aed); }
+        .eft-file-icon-audio   { background: linear-gradient(135deg, var(--iris-file-audio), #d97706); }
+        .eft-file-icon-archive { background: linear-gradient(135deg, var(--iris-file-archive), #dc2626); }
+        .eft-file-icon-code    { background: linear-gradient(135deg, var(--iris-file-code), #0891b2); }
+        .eft-file-icon-default { background: linear-gradient(135deg, var(--iris-file-default), #475569); }
+        .enc-file-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
+        .enc-file-card:hover .enc-file-actions { opacity: 1; }
+        .enc-action-btn { width: 28px; height: 28px; border: none; border-radius: var(--iris-radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; transition: var(--iris-transition); }
+        .enc-action-btn.preview { background: rgba(99,102,241,0.15); color: var(--iris-accent); }
+        .enc-action-btn.dl  { background: rgba(16,185,129,0.15); color: var(--iris-success); }
+        .enc-action-btn.del { background: rgba(239,68,68,0.15); color: var(--iris-danger); }
+        .enc-action-btn:hover { transform: scale(1.12); filter: brightness(1.2); }
+        .enc-file-name { font-size: 0.875rem; font-weight: 600; color: var(--iris-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 3px; }
+        .enc-file-size { font-size: 0.75rem; color: var(--iris-text-muted); }
+        .enc-file-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 0.7375rem; color: var(--iris-text-muted); }
+        .enc-file-enc-badge { display: flex; align-items: center; gap: 4px; color: var(--iris-warning); font-weight: 600; }
+
+        /* ===== PREVIEW MODAL ===== */
+        .preview-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            z-index: 9000; display: flex; align-items: center; justify-content: center;
+            padding: 24px; opacity: 0; visibility: hidden; transition: all 0.25s var(--iris-ease);
+        }
+        .preview-overlay.open { opacity: 1; visibility: visible; }
+        .preview-modal {
+            background: var(--iris-bg-modal); border: 1px solid var(--iris-border);
+            border-radius: var(--iris-radius-xl); max-width: 900px; width: 100%;
+            max-height: 85vh; display: flex; flex-direction: column;
+            transform: scale(0.92); transition: transform 0.25s var(--iris-ease-spring);
+            overflow: hidden;
+        }
+        .preview-overlay.open .preview-modal { transform: scale(1); }
+        .preview-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px; border-bottom: 1px solid var(--iris-border); flex-shrink: 0;
+        }
+        .preview-title { font-size: 0.9375rem; font-weight: 700; color: var(--iris-text-primary); display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .preview-body { flex: 1; overflow: auto; padding: 20px; }
+        .preview-footer { padding: 12px 20px; border-top: 1px solid var(--iris-border); display: flex; justify-content: flex-end; gap: 8px; flex-shrink: 0; }
+
+        /* Image preview */
+        .preview-img { max-width: 100%; max-height: 60vh; border-radius: var(--iris-radius-md); display: block; margin: 0 auto; object-fit: contain; }
+
+        /* Text preview */
+        .preview-code {
+            background: var(--iris-bg-input); border: 1px solid var(--iris-border);
+            border-radius: var(--iris-radius-md); padding: 16px; margin: 0;
+            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8125rem;
+            line-height: 1.6; color: var(--iris-text-primary); white-space: pre-wrap;
+            word-wrap: break-word; overflow: auto;
+        }
+
+        /* ZIP preview */
+        .zip-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+        .zip-table th { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--iris-text-muted); padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--iris-border); }
+        .zip-table td { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--iris-text-secondary); }
+        .zip-table tr:hover td { background: var(--iris-bg-card-hover); }
+        .zip-row-dir td { color: var(--iris-accent); font-weight: 600; }
+        .zip-row-dir .zip-name::before { content: '📁 '; }
+
+        /* Preview loading */
+        .preview-loading { text-align: center; padding: 60px 20px; color: var(--iris-text-muted); }
+        .preview-spinner { width: 36px; height: 36px; border: 3px solid var(--iris-border); border-top-color: var(--iris-accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ===== BREADCRUMB ===== */
+        .iris-breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 0.875rem; color: var(--iris-text-muted); margin-bottom: 20px; }
+        .iris-breadcrumb a { color: var(--iris-text-muted); text-decoration: none; transition: color 0.2s; }
+        .iris-breadcrumb a:hover { color: var(--iris-text-primary); }
+        .iris-breadcrumb-sep { color: var(--iris-border); font-size: 0.75rem; }
+        .iris-breadcrumb-current { color: var(--iris-text-primary); font-weight: 600; }
+
+        /* ===== MOBILE ===== */
+        .sidebar-toggle { display: none; background: var(--iris-bg-card); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-md); width: 36px; height: 36px; align-items: center; justify-content: center; cursor: pointer; color: var(--iris-text-secondary); font-size: 1.05rem; flex-shrink: 0; }
+
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.mobile-open { transform: translateX(0); }
+            .main-content { margin-left: 0; }
+            .sidebar-toggle { display: flex; }
+            .content-area { padding: 14px; }
+            .topbar { padding: 10px 14px; }
+            .folder-header-inner { flex-direction: column; align-items: flex-start; gap: 14px; }
+            .enc-files-grid { grid-template-columns: 1fr; }
+            .lock-card { padding: 32px 24px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-layout">
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a class="sidebar-brand" href="/dashboard">
+                <div class="sidebar-brand-icon"><i class="bi bi-shield-lock-fill"></i></div>
+                <span class="sidebar-brand-text">IRIS<span>-VE</span></span>
+            </a>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="sidebar-section-label">Navigazione</div>
+            <a class="sidebar-link" href="/dashboard">
+                <i class="bi bi-grid-3x3-gap-fill"></i> Dashboard
+            </a>
+            <a class="sidebar-link" href="/documentation">
+                <i class="bi bi-book-fill"></i> Documentazione
+            </a>
+            <div class="sidebar-section-label">Cartella</div>
+            <span class="sidebar-link active" style="cursor:default;">
+                <i class="bi bi-shield-lock"></i> {{ folder.name }}
+            </span>
+        </nav>
+
+        {% if not locked %}
+        <div class="sidebar-enc-panel">
+            <div class="sidebar-enc-title"><i class="bi bi-shield-check"></i> Cartella Cifrata</div>
+            <div class="sidebar-enc-row"><span>File</span><span>{{ files|length }}</span></div>
+            {% if folder.created_at %}
+            <div class="sidebar-enc-row"><span>Creata</span><span>{{ folder.created_at.strftime('%d/%m/%Y') }}</span></div>
+            {% endif %}
+            <div class="sidebar-enc-row"><span>Cifratura</span><span>AES-256</span></div>
+        </div>
+        {% endif %}
+
+        <div class="sidebar-footer">
+            <a class="sidebar-link danger" href="/logout">
+                <i class="bi bi-box-arrow-left"></i> Esci
+            </a>
+        </div>
+    </aside>
+
+    <!-- ===== MAIN ===== -->
+    <main class="main-content">
+        <header class="topbar">
+            <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('mobile-open')">
+                <i class="bi bi-list"></i>
+            </button>
+            <div class="topbar-title">
+                <a href="/dashboard">Dashboard</a>
+                <span class="sep">/</span>
+                <i class="bi bi-shield-lock me-1" style="color:var(--iris-warning);font-size:0.95rem;"></i>{{ folder.name }}
+            </div>
+            <button class="iris-theme-toggle" onclick="toggleTheme()" title="Cambia tema">
+                <i class="bi bi-moon-stars-fill" id="theme-icon"></i>
+            </button>
+        </header>
+
+        <div class="content-area">
+
+            {% if locked %}
+            <!-- ===== LOCK SCREEN ===== -->
+            <div class="lock-screen">
+                <div class="lock-card">
+                    <div class="lock-icon"><i class="bi bi-shield-lock"></i></div>
+                    <div class="lock-title">Cartella Protetta</div>
+                    <div class="lock-subtitle">
+                        Inserisci la password per accedere a <strong>{{ folder.name }}</strong>
+                        {% if folder.password_hint %}
+                        <br><span style="color:var(--iris-warning);font-size:0.8rem;margin-top:4px;display:block;">
+                            <i class="bi bi-lightbulb me-1"></i>Suggerimento: {{ folder.password_hint }}
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    <div class="iris-input-group" style="text-align:left;">
+                        <label style="font-size:0.8125rem;font-weight:600;color:var(--iris-text-secondary);margin-bottom:6px;display:block;">Password</label>
+                        <div style="position:relative;">
+                            <input type="password" id="lockPassword" class="iris-input"
+                                   placeholder="Inserisci la password…" autocomplete="current-password"
+                                   style="padding-right:44px;"
+                                   onkeydown="if(event.key==='Enter') unlockFolder()">
+                            <button type="button" onclick="togglePwdVisibility()"
+                                    style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--iris-text-muted);cursor:pointer;font-size:1rem;padding:0;line-height:1;">
+                                <i class="bi bi-eye" id="pwdEyeIcon"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="lock-error" id="lockError">
+                        <i class="bi bi-x-circle me-1"></i><span id="lockErrorMsg">Password errata</span>
+                    </div>
+
+                    <button class="btn-iris btn-iris-primary" style="width:100%;margin-top:20px;" onclick="unlockFolder()" id="unlockBtn">
+                        <i class="bi bi-unlock"></i> Sblocca
+                    </button>
+
+                    <div style="margin-top:16px;">
+                        <a href="/dashboard" style="font-size:0.8125rem;color:var(--iris-text-muted);text-decoration:none;">
+                            <i class="bi bi-arrow-left me-1"></i>Torna alla dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            {% else %}
+            <!-- ===== UNLOCKED CONTENT ===== -->
+
+            <nav class="iris-breadcrumb">
+                <a href="/dashboard"><i class="bi bi-grid-3x3-gap me-1"></i>Dashboard</a>
+                <span class="iris-breadcrumb-sep"><i class="bi bi-chevron-right"></i></span>
+                <span class="iris-breadcrumb-current">
+                    <i class="bi bi-shield-lock me-1" style="color:var(--iris-warning);"></i>{{ folder.name }}
+                </span>
+            </nav>
+
+            <div class="enc-badge">
+                <i class="bi bi-shield-check"></i>
+                Contenuto cifrato e protetto · AES-256-CFB
+            </div>
+
+            <!-- Folder header -->
+            <div class="folder-header-card">
+                <div class="folder-header-inner">
+                    <div class="folder-icon-enc"><i class="bi bi-shield-lock"></i></div>
+                    <div class="folder-info">
+                        <div class="folder-name">{{ folder.name }}</div>
+                        <div class="folder-meta-row">
+                            <div class="folder-meta-item">
+                                <i class="bi bi-calendar3"></i>
+                                Creata il {{ folder.created_at.strftime('%d/%m/%Y') if folder.created_at else '—' }}
+                            </div>
+                            <div class="folder-meta-item">
+                                <i class="bi bi-files"></i>
+                                {{ files|length }} file
+                            </div>
+                            {% if folder.password_hint %}
+                            <div class="folder-meta-item" title="Suggerimento password">
+                                <i class="bi bi-lightbulb"></i> {{ folder.password_hint }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% if folder.description %}
+                <div class="folder-description">{{ folder.description }}</div>
+                {% endif %}
+            </div>
+
+            {% if content %}
+            <!-- Decrypted text content -->
+            <div class="iris-section-card">
+                <div class="section-header">
+                    <span class="section-title"><i class="bi bi-file-text"></i> Contenuto Decifrato</span>
+                </div>
+                <div class="content-viewer">{{ content }}</div>
+            </div>
+            {% endif %}
+
+            <!-- Upload -->
+            <div class="iris-section-card">
+                <div class="section-header">
+                    <span class="section-title"><i class="bi bi-shield-plus"></i> Carica File Cifrati</span>
+                </div>
+                <form id="uploadForm" enctype="multipart/form-data" method="post"
+                      action="/api/folders/{{ folder.id }}/upload">
+                    <div class="enc-upload-zone" id="uploadZone"
+                         onclick="document.getElementById('fileInput').click()"
+                         ondragover="event.preventDefault();this.classList.add('drag-over')"
+                         ondragleave="handleDragLeave(event)"
+                         ondrop="handleDrop(event)">
+                        <div class="enc-upload-icon"><i class="bi bi-shield-lock"></i></div>
+                        <div class="enc-upload-label">Trascina i file qui o clicca per selezionare</div>
+                        <div class="enc-upload-sub">I file vengono cifrati automaticamente · Tutte le estensioni · Max 15 GB</div>
+                    </div>
+                    <input type="file" id="fileInput" name="file" multiple style="display:none;">
+                </form>
+                <div id="uploadProgressWrap" style="display:none;margin-top:14px;">
+                    <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:var(--iris-text-secondary);margin-bottom:5px;">
+                        <span id="uploadFileName">Caricamento…</span>
+                        <span id="uploadPercent">0%</span>
+                    </div>
+                    <div class="iris-progress"><div class="iris-progress-bar" id="uploadProgressBar" style="width:0%;"></div></div>
+                </div>
+            </div>
+
+            <!-- Files -->
+            <div class="iris-section-card">
+                <div class="section-header">
+                    <span class="section-title">
+                        <i class="bi bi-shield-fill-check"></i> File Cifrati
+                        <span style="background:rgba(99,102,241,0.12);color:var(--iris-accent);font-size:0.75rem;padding:2px 8px;border-radius:var(--iris-radius-pill);font-weight:600;">{{ files|length }}</span>
+                    </span>
+                </div>
+
+                {% if files %}
+                <div class="enc-files-grid iris-stagger" id="filesGrid">
+                    {% for file in files %}
+                    <div class="enc-file-card">
+                        <div class="enc-file-top">
+                            <div class="enc-file-icon eft-{{ get_file_icon_class(file.name) }}">
+                                <i class="bi {{ get_file_icon(file.name) }}"></i>
+                            </div>
+                            <div class="enc-file-actions">
+                                <button class="enc-action-btn preview"
+                                        data-file-id="{{ file.id }}" data-file-name="{{ (file.original_name or file.name)|e }}"
+                                        onclick="openPreview(+this.dataset.fileId, this.dataset.fileName)"
+                                        title="Anteprima">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button class="enc-action-btn dl"
+                                        data-file-id="{{ file.id }}" data-file-name="{{ (file.original_name or file.name)|e }}"
+                                        onclick="downloadFile(+this.dataset.fileId, this.dataset.fileName)"
+                                        title="Scarica">
+                                    <i class="bi bi-download"></i>
+                                </button>
+                                <button class="enc-action-btn del"
+                                        data-file-id="{{ file.id }}" data-file-name="{{ (file.original_name or file.name)|e }}"
+                                        onclick="deleteFile(+this.dataset.fileId, this.dataset.fileName)"
+                                        title="Elimina">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="enc-file-name">{{ file.original_name or file.name }}</div>
+                        <div class="enc-file-size">{{ format_bytes(file.size) }}</div>
+                        <div class="enc-file-footer">
+                            <span><i class="bi bi-calendar3 me-1"></i>{{ file.created_at.strftime('%d/%m/%Y') if file.created_at else '—' }}</span>
+                            <span class="enc-file-enc-badge"><i class="bi bi-shield-fill-check"></i> Cifrato</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="iris-empty-state">
+                    <div class="iris-empty-icon" style="color:var(--iris-warning);"><i class="bi bi-shield-slash"></i></div>
+                    <h3 style="font-size:1.0625rem;font-weight:700;margin-bottom:8px;">Nessun file in questa cartella</h3>
+                    <p style="color:var(--iris-text-muted);font-size:0.875rem;">Carica i tuoi file usando l'area sopra. Verranno cifrati automaticamente con AES-256.</p>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}{# end if not locked #}
+
+        </div><!-- /content-area -->
+    </main>
+</div>
+
+<!-- ===== PREVIEW MODAL (solo quando sbloccata) ===== -->
+{% if not locked %}
+<div class="preview-overlay" id="previewOverlay" onclick="if(event.target===this)closePreview()">
+    <div class="preview-modal">
+        <div class="preview-header">
+            <div class="preview-title" id="previewTitle"><i class="bi bi-eye me-2"></i>Anteprima</div>
+            <button class="iris-modal-close" onclick="closePreview()"><i class="bi bi-x"></i></button>
+        </div>
+        <div class="preview-body" id="previewBody">
+            <div class="preview-loading">
+                <div class="preview-spinner"></div>
+                <div>Caricamento anteprima…</div>
+            </div>
+        </div>
+        <div class="preview-footer" id="previewFooter"></div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ===== TOAST CONTAINER ===== -->
+<div class="iris-toast-container" id="toastContainer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// =====================================================================
+// THEME
+// =====================================================================
+function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    document.getElementById('theme-icon').className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+    localStorage.setItem('iris-theme', isDark ? 'light' : 'dark');
+}
+(function () {
+    const saved = localStorage.getItem('iris-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    const icon = document.getElementById('theme-icon');
+    if (icon) icon.className = saved === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+})();
+
+// =====================================================================
+// SECURITY
+// =====================================================================
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(String(str)));
+    return div.innerHTML;
+}
+
+// =====================================================================
+// TOAST
+// =====================================================================
+function showToast(type, title, msg, duration = 4500) {
+    const icons = { success:'bi-check-circle-fill', error:'bi-x-circle-fill', info:'bi-info-circle-fill', warning:'bi-exclamation-triangle-fill' };
+    const t = document.createElement('div');
+    t.className = `iris-toast iris-toast-${type}`;
+    t.innerHTML = `<div class="iris-toast-icon"><i class="bi ${icons[type]||'bi-bell-fill'}"></i></div>
+        <div class="iris-toast-body"><div class="iris-toast-title">${escapeHtml(title)}</div>${msg?`<div class="iris-toast-msg">${escapeHtml(msg)}</div>`:''}</div>
+        <button class="iris-toast-close" onclick="removeToast(this.parentElement)"><i class="bi bi-x"></i></button>`;
+    document.getElementById('toastContainer').appendChild(t);
+    setTimeout(() => removeToast(t), duration);
+}
+function removeToast(t) {
+    if (!t?.parentElement) return;
+    t.classList.add('removing');
+    setTimeout(() => t.remove(), 300);
+}
+
+// =====================================================================
+// LOCK SCREEN
+// =====================================================================
+{% if locked %}
+function togglePwdVisibility() {
+    const inp = document.getElementById('lockPassword');
+    const icon = document.getElementById('pwdEyeIcon');
+    if (inp.type === 'password') {
+        inp.type = 'text';
+        icon.className = 'bi bi-eye-slash';
+    } else {
+        inp.type = 'password';
+        icon.className = 'bi bi-eye';
+    }
+}
+
+async function unlockFolder() {
+    const password = document.getElementById('lockPassword').value;
+    const btn = document.getElementById('unlockBtn');
+    const errorEl = document.getElementById('lockError');
+    const errorMsg = document.getElementById('lockErrorMsg');
+
+    if (!password) {
+        errorMsg.textContent = 'Inserisci la password.';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="preview-spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>Verifica…';
+    errorEl.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/folders/{{ folder.id }}/encrypt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            btn.innerHTML = '<i class="bi bi-check2"></i> Accesso consentito';
+            setTimeout(() => location.reload(), 600);
+        } else {
+            errorMsg.textContent = data.message || 'Password errata.';
+            errorEl.style.display = 'block';
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-unlock"></i> Sblocca';
+            document.getElementById('lockPassword').focus();
+            document.getElementById('lockPassword').select();
+        }
+    } catch (err) {
+        errorMsg.textContent = 'Errore di rete: ' + err.message;
+        errorEl.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-unlock"></i> Sblocca';
+    }
+}
+{% endif %}
+
+// =====================================================================
+// UPLOAD  (only active when unlocked)
+// =====================================================================
+{% if not locked %}
+const uploadForm = document.getElementById('uploadForm');
+const fileInput  = document.getElementById('fileInput');
+
+fileInput.addEventListener('change', () => uploadFiles(fileInput.files));
+
+function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('uploadZone').classList.remove('drag-over');
+    uploadFiles(e.dataTransfer.files);
+}
+
+function handleDragLeave(event) {
+    const zone = document.getElementById('uploadZone');
+    if (!zone.contains(event.relatedTarget)) {
+        zone.classList.remove('drag-over');
+    }
+}
+
+async function uploadFiles(files) {
+    if (!files || files.length === 0) return;
+    for (const file of files) { await uploadSingle(file); }
+    setTimeout(() => location.reload(), 1200);
+}
+
+function uploadSingle(file) {
+    const progressWrap = document.getElementById('uploadProgressWrap');
+    const progressBar  = document.getElementById('uploadProgressBar');
+    const fileNameEl   = document.getElementById('uploadFileName');
+    const percentEl    = document.getElementById('uploadPercent');
+
+    progressWrap.style.display = 'block';
+    fileNameEl.textContent = file.name;
+    progressBar.style.width = '0%';
+    percentEl.textContent = '0%';
+    showToast('info', 'Cifratura in corso', 'I file vengono cifrati con AES-256…');
+
+    return new Promise(resolve => {
+        const formData = new FormData(uploadForm);
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener('progress', e => {
+            if (e.lengthComputable) {
+                const p = Math.round(e.loaded / e.total * 100);
+                progressBar.style.width = p + '%';
+                percentEl.textContent = p + '%';
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            progressBar.style.width = '100%';
+            percentEl.textContent = '100%';
+            setTimeout(() => { progressWrap.style.display = 'none'; }, 600);
+            try {
+                const data = JSON.parse(xhr.responseText);
+                if (data.success) showToast('success', 'Upload completato', 'File cifrato e salvato.');
+                else showToast('error', 'Errore upload', data.message || 'Si è verificato un errore.');
+            } catch(e) { showToast('error', 'Errore', 'Risposta non valida dal server.'); }
+            resolve();
+        });
+
+        xhr.addEventListener('error', () => {
+            progressWrap.style.display = 'none';
+            showToast('error', 'Errore di rete', `Impossibile caricare ${escapeHtml(file.name)}`);
+            resolve();
+        });
+
+        xhr.open('POST', uploadForm.action);
+        xhr.send(formData);
+    });
+}
+
+// =====================================================================
+// FILE ACTIONS
+// =====================================================================
+function downloadFile(fileId, filename) {
+    showToast('info', 'Download avviato', escapeHtml(filename));
+    window.location.href = `/api/files/${fileId}/download`;
+}
+
+function deleteFile(fileId, filename) {
+    const safeName = escapeHtml(filename);
+    if (!confirm(`Eliminare "${safeName}"?\nQuesta azione non può essere annullata.`)) return;
+    fetch(`/api/files/${fileId}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                showToast('success', 'File eliminato', safeName);
+                setTimeout(() => location.reload(), 1400);
+            } else {
+                showToast('error', 'Errore eliminazione', result.message || 'Errore.');
+            }
+        })
+        .catch(err => showToast('error', 'Errore di rete', err.message));
+}
+
+// =====================================================================
+// PREVIEW
+// =====================================================================
+let previewFileId = null;
+
+function openPreview(fileId, filename) {
+    previewFileId = fileId;
+    const overlay = document.getElementById('previewOverlay');
+    document.getElementById('previewTitle').innerHTML = `<i class="bi bi-eye me-2"></i>${escapeHtml(filename)}`;
+    document.getElementById('previewBody').innerHTML = `<div class="preview-loading"><div class="preview-spinner"></div><div>Caricamento anteprima…</div></div>`;
+    document.getElementById('previewFooter').innerHTML = '';
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    fetch(`/api/files/${fileId}/preview`)
+        .then(r => r.json())
+        .then(data => renderPreview(data, fileId, filename))
+        .catch(err => {
+            document.getElementById('previewBody').innerHTML = `<div class="preview-loading" style="color:var(--iris-danger);"><i class="bi bi-x-circle" style="font-size:2rem;display:block;margin:0 auto 12px;"></i>Errore: ${escapeHtml(err.message)}</div>`;
+        });
+}
+
+function renderPreview(data, fileId, filename) {
+    const body   = document.getElementById('previewBody');
+    const footer = document.getElementById('previewFooter');
+
+    footer.innerHTML = `<button class="btn-iris btn-iris-ghost btn-iris-sm" onclick="closePreview()">Chiudi</button>
+        <button class="btn-iris btn-iris-primary btn-iris-sm" onclick="downloadFile(${fileId}, '${escapeHtml(filename)}')"><i class="bi bi-download"></i> Scarica</button>`;
+
+    if (data.type === 'image') {
+        body.innerHTML = `<img src="${data.url}" class="preview-img" alt="${escapeHtml(filename)}" loading="lazy">`;
+        return;
+    }
+
+    if (data.type === 'text') {
+        const lang = data.ext || 'txt';
+        body.innerHTML = `<pre class="preview-code">${escapeHtml(data.content)}</pre>`;
+        return;
+    }
+
+    if (data.type === 'zip') {
+        const truncNote = data.total > data.contents.length
+            ? `<div style="font-size:0.8rem;color:var(--iris-text-muted);padding:8px 12px;">Mostrati ${data.contents.length} di ${data.total} voci</div>` : '';
+
+        const rows = data.contents.map(f => {
+            const cls = f.is_dir ? 'zip-row-dir' : '';
+            return `<tr class="${cls}"><td class="zip-name">${escapeHtml(f.name)}</td><td>${f.is_dir ? '—' : f.size}</td><td>${f.is_dir ? '—' : f.compressed}</td></tr>`;
+        }).join('');
+
+        body.innerHTML = `<table class="zip-table">
+            <thead><tr><th>Nome</th><th>Dimensione</th><th>Compressa</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>${truncNote}`;
+        return;
+    }
+
+    // Unsupported
+    body.innerHTML = `<div class="preview-loading" style="color:var(--iris-text-muted);">
+        <i class="bi bi-file-earmark" style="font-size:3rem;display:block;margin:0 auto 12px;opacity:0.4;"></i>
+        <div style="font-size:0.875rem;">Anteprima non disponibile per questo tipo di file.</div>
+        <div style="font-size:0.8rem;margin-top:6px;">Usa il pulsante Scarica per visualizzarlo.</div>
+    </div>`;
+}
+
+function closePreview() {
+    document.getElementById('previewOverlay').classList.remove('open');
+    document.body.style.overflow = '';
+    previewFileId = null;
+}
+{% endif %}
+
+// =====================================================================
+// INIT
+// =====================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    {% if not locked %}
+    setTimeout(() => showToast('success', 'Cartella sbloccata', 'Contenuto decifrato con successo.'), 600);
+    {% endif %}
+});
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        if (typeof closePreview === 'function') closePreview();
+        document.getElementById('sidebar').classList.remove('mobile-open');
+    }
+});
+</script>
+</body>
+</html>

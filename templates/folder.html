@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — IRIS-VE</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%236366f1'/><text x='50%25' y='55%25' font-size='18' text-anchor='middle' dominant-baseline='middle' fill='white'>I</text></svg>">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='iris-ve.css') }}">
+
+    <style>
+        .app-layout { display: flex; min-height: 100vh; }
+
+        /* ===== SIDEBAR ===== */
+        .sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            background: rgba(10, 14, 26, 0.88);
+            backdrop-filter: var(--iris-blur);
+            -webkit-backdrop-filter: var(--iris-blur);
+            border-right: 1px solid var(--iris-border);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0; left: 0;
+            height: 100vh;
+            overflow-y: auto;
+            z-index: 50;
+            transition: transform 0.3s var(--iris-ease);
+        }
+        [data-theme="light"] .sidebar { background: rgba(238,242,255,0.92); }
+
+        .sidebar-header {
+            padding: 22px 20px 18px;
+            border-bottom: 1px solid var(--iris-border);
+        }
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+        .sidebar-brand-icon {
+            width: 38px; height: 38px;
+            background: var(--iris-accent-grad);
+            border-radius: var(--iris-radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            color: white;
+            box-shadow: 0 4px 12px rgba(99,102,241,0.4);
+            flex-shrink: 0;
+        }
+        .sidebar-brand-text {
+            font-size: 1.1875rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--iris-text-primary);
+        }
+        .sidebar-brand-text span {
+            background: var(--iris-accent-grad);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .sidebar-nav { padding: 14px 12px; flex: 1; }
+
+        .sidebar-section-label {
+            font-size: 0.6875rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--iris-text-muted);
+            padding: 0 8px;
+            margin-bottom: 6px;
+            margin-top: 14px;
+        }
+        .sidebar-section-label:first-child { margin-top: 0; }
+
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: var(--iris-radius-md);
+            color: var(--iris-text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: var(--iris-transition);
+            cursor: pointer;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+        .sidebar-link:hover, .sidebar-link.active {
+            background: rgba(99,102,241,0.12);
+            color: var(--iris-text-primary);
+        }
+        .sidebar-link.active { color: var(--iris-accent-3); }
+        .sidebar-link i { font-size: 1.05rem; width: 20px; text-align: center; flex-shrink: 0; }
+        .sidebar-link.danger { color: var(--iris-danger); }
+        .sidebar-link.danger:hover { background: rgba(239,68,68,0.1); color: var(--iris-danger); }
+
+        .sidebar-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding: 14px;
+            border-top: 1px solid var(--iris-border);
+        }
+        .stat-mini {
+            background: var(--iris-bg-card);
+            border: 1px solid var(--iris-border);
+            border-radius: var(--iris-radius-md);
+            padding: 10px;
+            text-align: center;
+        }
+        .stat-mini-val { font-size: 1.25rem; font-weight: 800; color: var(--iris-text-primary); letter-spacing: -0.03em; display: block; }
+        .stat-mini-lbl { font-size: 0.6875rem; color: var(--iris-text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+        .sidebar-disk { padding: 10px 16px 14px; border-top: 1px solid var(--iris-border); }
+        .disk-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .disk-label { font-size: 0.75rem; font-weight: 600; color: var(--iris-text-secondary); }
+        .disk-value { font-size: 0.75rem; color: var(--iris-text-muted); }
+
+        .sidebar-network { padding: 10px 16px 14px; border-top: 1px solid var(--iris-border); }
+        .network-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 0.8rem; color: var(--iris-text-secondary); }
+        .network-row i { width: 14px; color: var(--iris-text-muted); font-size: 0.8rem; flex-shrink: 0; }
+        .network-val {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.7rem;
+            color: var(--iris-accent-3);
+            background: rgba(99,102,241,0.1);
+            padding: 2px 5px;
+            border-radius: 4px;
+            border: 1px solid rgba(99,102,241,0.2);
+            word-break: break-all;
+        }
+
+        .sidebar-footer { padding: 10px 12px 14px; border-top: 1px solid var(--iris-border); }
+
+        /* ===== MAIN ===== */
+        .main-content { flex: 1; margin-left: 280px; display: flex; flex-direction: column; min-height: 100vh; }
+
+        .topbar {
+            position: sticky; top: 0; z-index: 40;
+            display: flex; align-items: center; gap: 12px;
+            padding: 14px 28px;
+            background: rgba(10,14,26,0.78);
+            backdrop-filter: var(--iris-blur);
+            -webkit-backdrop-filter: var(--iris-blur);
+            border-bottom: 1px solid var(--iris-border);
+        }
+        [data-theme="light"] .topbar { background: rgba(238,242,255,0.88); }
+
+        .topbar-title { font-size: 1.0625rem; font-weight: 700; color: var(--iris-text-primary); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .topbar-title a { color: var(--iris-text-muted); text-decoration: none; }
+        .topbar-title a:hover { color: var(--iris-text-primary); }
+        .topbar-title span { color: var(--iris-text-muted); font-weight: 400; }
+
+        .topbar-search { position: relative; width: 240px; flex-shrink: 0; }
+        .topbar-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--iris-text-muted); font-size: 0.875rem; }
+        .topbar-search input {
+            width: 100%; padding: 8px 12px 8px 34px;
+            background: var(--iris-bg-input);
+            border: 1px solid var(--iris-border);
+            border-radius: var(--iris-radius-pill);
+            color: var(--iris-text-primary); font-size: 0.875rem;
+            transition: var(--iris-transition);
+        }
+        .topbar-search input::placeholder { color: var(--iris-text-muted); }
+        .topbar-search input:focus { outline: none; border-color: var(--iris-accent); background: var(--iris-bg-card-hover); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+
+        .content-area { padding: 28px; flex: 1; }
+
+        /* Page header */
+        .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; gap: 12px; }
+        .page-title { font-size: 1.4375rem; font-weight: 800; letter-spacing: -0.03em; color: var(--iris-text-primary); }
+        .page-subtitle { font-size: 0.8125rem; color: var(--iris-text-muted); margin-top: 2px; }
+
+        /* ===== FOLDER CARDS ===== */
+        .folders-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; margin-bottom: 28px; }
+
+        .folder-card {
+            background: var(--iris-bg-card);
+            backdrop-filter: var(--iris-blur-sm);
+            -webkit-backdrop-filter: var(--iris-blur-sm);
+            border: 1px solid var(--iris-border);
+            border-radius: var(--iris-radius-lg);
+            padding: 18px;
+            cursor: pointer;
+            transition: var(--iris-transition);
+            position: relative;
+            overflow: hidden;
+        }
+        .folder-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: var(--iris-accent-grad); opacity: 0;
+            transition: opacity 0.3s var(--iris-ease);
+        }
+        .folder-card:hover {
+            background: var(--iris-bg-card-hover);
+            border-color: rgba(99,102,241,0.3);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(99,102,241,0.15), var(--iris-shadow);
+        }
+        .folder-card:hover::before { opacity: 1; }
+
+        .folder-card-icon-wrap {
+            width: 46px; height: 46px;
+            border-radius: var(--iris-radius-md);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.35rem; margin-bottom: 12px;
+            transition: var(--iris-transition);
+        }
+        .folder-card:hover .folder-card-icon-wrap { transform: scale(1.08); }
+        .folder-icon-normal  { background: rgba(245,158,11,0.15); color: #f59e0b; }
+        .folder-icon-encrypt { background: rgba(99,102,241,0.15);  color: var(--iris-accent); }
+
+        .folder-card-name { font-size: 0.9375rem; font-weight: 700; color: var(--iris-text-primary); margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .folder-card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .folder-card-desc { font-size: 0.8rem; color: var(--iris-text-muted); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .folder-card-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
+        .folder-card:hover .folder-card-actions { opacity: 1; }
+        .card-del-btn { width: 28px; height: 28px; background: rgba(239,68,68,0.12); color: var(--iris-danger); border: none; border-radius: var(--iris-radius-sm); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.875rem; transition: var(--iris-transition); }
+        .card-del-btn:hover { background: rgba(239,68,68,0.25); }
+        .card-edit-btn { width: 28px; height: 28px; background: rgba(99,102,241,0.12); color: var(--iris-accent); border: none; border-radius: var(--iris-radius-sm); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.875rem; transition: var(--iris-transition); }
+        .card-edit-btn:hover { background: rgba(99,102,241,0.25); }
+
+        /* ===== ICON PICKER ===== */
+        .icon-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 6px; padding: 4px 0; }
+        .icon-pick-btn { width: 40px; height: 40px; background: var(--iris-bg-input); border: 1.5px solid var(--iris-border); border-radius: var(--iris-radius-sm); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.15rem; color: var(--iris-text-secondary); transition: var(--iris-transition); }
+        .icon-pick-btn:hover { background: rgba(99,102,241,0.12); color: var(--iris-accent); border-color: var(--iris-accent); }
+        .icon-pick-btn.selected { background: rgba(99,102,241,0.18); color: var(--iris-accent); border-color: var(--iris-accent); }
+
+        /* ===== FILE LIST ===== */
+        .file-list { display: flex; flex-direction: column; gap: 5px; }
+
+        .file-row {
+            display: flex; align-items: center; gap: 12px;
+            padding: 11px 14px;
+            background: var(--iris-bg-card);
+            border: 1px solid var(--iris-border);
+            border-radius: var(--iris-radius-md);
+            transition: var(--iris-transition);
+            position: relative; overflow: hidden;
+        }
+        .file-row:hover { background: var(--iris-bg-card-hover); border-color: rgba(99,102,241,0.2); transform: translateX(3px); }
+
+        .file-type-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+        .ftype-doc     { background: var(--iris-file-doc); }
+        .ftype-img     { background: var(--iris-file-img); }
+        .ftype-video   { background: var(--iris-file-video); }
+        .ftype-audio   { background: var(--iris-file-audio); }
+        .ftype-archive { background: var(--iris-file-archive); }
+        .ftype-code    { background: var(--iris-file-code); }
+        .ftype-default { background: var(--iris-file-default); }
+
+        .file-icon-wrap { width: 34px; height: 34px; border-radius: var(--iris-radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1.05rem; flex-shrink: 0; }
+        .file-info { flex: 1; min-width: 0; }
+        .file-name { font-size: 0.875rem; font-weight: 600; color: var(--iris-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .file-meta { font-size: 0.7375rem; color: var(--iris-text-muted); margin-top: 1px; }
+
+        .file-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; flex-shrink: 0; }
+        .file-row:hover .file-actions { opacity: 1; }
+
+        /* ===== UPLOAD ===== */
+        .upload-progress-wrap { margin-top: 14px; display: none; }
+        .upload-progress-info { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--iris-text-secondary); margin-bottom: 5px; }
+
+        /* ===== BREADCRUMB ===== */
+        .iris-breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 0.875rem; color: var(--iris-text-muted); margin-bottom: 18px; }
+        .iris-breadcrumb a { color: var(--iris-text-muted); text-decoration: none; transition: color 0.2s; }
+        .iris-breadcrumb a:hover { color: var(--iris-text-primary); }
+        .iris-breadcrumb-sep { color: var(--iris-border); font-size: 0.75rem; }
+        .iris-breadcrumb-current { color: var(--iris-text-primary); font-weight: 600; }
+
+        /* Skeletons */
+        .folder-skeleton { height: 130px; border-radius: var(--iris-radius-lg); }
+        .file-skeleton   { height: 58px;  border-radius: var(--iris-radius-md); margin-bottom: 5px; }
+
+        /* Mobile sidebar */
+        .sidebar-toggle { display: none; background: var(--iris-bg-card); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-md); width: 36px; height: 36px; align-items: center; justify-content: center; cursor: pointer; color: var(--iris-text-secondary); font-size: 1.05rem; flex-shrink: 0; }
+
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.mobile-open { transform: translateX(0); }
+            .main-content { margin-left: 0; }
+            .sidebar-toggle { display: flex; }
+            .content-area { padding: 14px; }
+            .topbar { padding: 10px 14px; }
+            .topbar-search { display: none; }
+            .folders-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+        }
+
+        /* ===== PREVIEW MODAL ===== */
+        .preview-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            z-index: 9000; display: flex; align-items: center; justify-content: center;
+            padding: 24px; opacity: 0; visibility: hidden; transition: all 0.25s var(--iris-ease);
+        }
+        .preview-overlay.open { opacity: 1; visibility: visible; }
+        .preview-modal {
+            background: var(--iris-bg-modal); border: 1px solid var(--iris-border);
+            border-radius: var(--iris-radius-xl); max-width: 900px; width: 100%;
+            max-height: 85vh; display: flex; flex-direction: column;
+            transform: scale(0.92); transition: transform 0.25s var(--iris-ease-spring);
+            overflow: hidden;
+        }
+        .preview-overlay.open .preview-modal { transform: scale(1); }
+        .preview-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px; border-bottom: 1px solid var(--iris-border); flex-shrink: 0;
+        }
+        .preview-title { font-size: 0.9375rem; font-weight: 700; color: var(--iris-text-primary); display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .preview-body { flex: 1; overflow: auto; padding: 20px; }
+        .preview-footer { padding: 12px 20px; border-top: 1px solid var(--iris-border); display: flex; justify-content: flex-end; gap: 8px; flex-shrink: 0; }
+        .preview-img { max-width: 100%; max-height: 60vh; border-radius: var(--iris-radius-md); display: block; margin: 0 auto; object-fit: contain; }
+        .preview-code {
+            background: var(--iris-bg-input); border: 1px solid var(--iris-border);
+            border-radius: var(--iris-radius-md); padding: 16px; margin: 0;
+            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8125rem;
+            line-height: 1.6; color: var(--iris-text-primary); white-space: pre-wrap;
+            word-wrap: break-word; overflow: auto;
+        }
+        .zip-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+        .zip-table th { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--iris-text-muted); padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--iris-border); }
+        .zip-table td { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--iris-text-secondary); }
+        .zip-table tr:hover td { background: var(--iris-bg-card-hover); }
+        .zip-row-dir td { color: var(--iris-accent); font-weight: 600; }
+        .preview-loading { text-align: center; padding: 60px 20px; color: var(--iris-text-muted); }
+        .preview-spinner { width: 36px; height: 36px; border: 3px solid var(--iris-border); border-top-color: var(--iris-accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="app-layout">
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a class="sidebar-brand" href="/dashboard">
+                <div class="sidebar-brand-icon"><i class="bi bi-shield-lock-fill"></i></div>
+                <span class="sidebar-brand-text">IRIS<span>-VE</span></span>
+            </a>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="sidebar-section-label">Navigazione</div>
+            <a class="sidebar-link active" href="/dashboard">
+                <i class="bi bi-grid-3x3-gap-fill"></i> Dashboard
+            </a>
+            <a class="sidebar-link" href="/documentation">
+                <i class="bi bi-book-fill"></i> Documentazione
+            </a>
+
+            <div class="sidebar-section-label">Azioni</div>
+            <button class="sidebar-link" onclick="openCreateModal()">
+                <i class="bi bi-folder-plus"></i> Nuova Cartella
+            </button>
+            <button class="sidebar-link" id="uploadTriggerBtn" style="display:none;" onclick="document.getElementById('fileInput').click()">
+                <i class="bi bi-upload"></i> Carica File
+            </button>
+            <button class="sidebar-link" onclick="refreshAll()">
+                <i class="bi bi-arrow-clockwise"></i> Aggiorna
+            </button>
+        </nav>
+
+        <div class="sidebar-stats">
+            <div class="stat-mini">
+                <span class="stat-mini-val" id="statFolders">—</span>
+                <span class="stat-mini-lbl">Cartelle</span>
+            </div>
+            <div class="stat-mini">
+                <span class="stat-mini-val" id="statFiles">—</span>
+                <span class="stat-mini-lbl">File</span>
+            </div>
+        </div>
+
+        <div class="sidebar-disk">
+            <div class="disk-header">
+                <span class="disk-label"><i class="bi bi-hdd me-1"></i>Disco</span>
+                <span class="disk-value" id="diskInfo">…</span>
+            </div>
+            <div class="iris-progress">
+                <div class="iris-progress-bar" id="diskProgress" style="width:0%"></div>
+            </div>
+        </div>
+
+        <div class="sidebar-network">
+            <div class="sidebar-section-label" style="padding:0;margin-bottom:8px;">Connessione</div>
+            <div class="network-row"><i class="bi bi-house-door"></i><span>Locale:</span><span class="network-val" id="netLocal">…</span></div>
+            <div class="network-row"><i class="bi bi-globe"></i><span>Pubblica:</span><span class="network-val" id="netPublic">…</span></div>
+            <div class="network-row"><i class="bi bi-server"></i><span>FTP:</span><span class="network-val" id="netFtp">…</span></div>
+        </div>
+
+        <div class="sidebar-footer">
+            <a class="sidebar-link danger" href="/logout">
+                <i class="bi bi-box-arrow-left"></i> Esci
+            </a>
+        </div>
+    </aside>
+
+    <!-- ===== MAIN ===== -->
+    <main class="main-content">
+        <header class="topbar">
+            <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('mobile-open')">
+                <i class="bi bi-list"></i>
+            </button>
+            <div class="topbar-title" id="topbarTitle">Dashboard <span>— Le tue cartelle</span></div>
+            <div class="topbar-search">
+                <i class="bi bi-search"></i>
+                <input type="text" id="searchInput" placeholder="Cerca…" oninput="handleSearch(this.value)">
+            </div>
+            <button class="iris-theme-toggle" onclick="toggleTheme()" title="Cambia tema">
+                <i class="bi bi-moon-stars-fill" id="theme-icon"></i>
+            </button>
+        </header>
+
+        <div class="content-area">
+
+            <!-- DASHBOARD VIEW -->
+            <div id="dashboardView">
+                <div class="page-header">
+                    <div>
+                        <div class="page-title">Le tue cartelle</div>
+                        <div class="page-subtitle" id="folderCountLabel">Caricamento…</div>
+                    </div>
+                    <button class="btn-iris btn-iris-primary" onclick="openCreateModal()">
+                        <i class="bi bi-plus-lg"></i> Nuova cartella
+                    </button>
+                </div>
+
+                <div class="folders-grid" id="skeletonFolders">
+                    <div class="skeleton folder-skeleton"></div>
+                    <div class="skeleton folder-skeleton"></div>
+                    <div class="skeleton folder-skeleton"></div>
+                    <div class="skeleton folder-skeleton"></div>
+                </div>
+                <div class="folders-grid iris-stagger" id="foldersGrid" style="display:none;"></div>
+                <div class="iris-empty-state" id="emptyFolders" style="display:none;">
+                    <div class="iris-empty-icon"><i class="bi bi-folder-x"></i></div>
+                    <h3 style="font-size:1.0625rem;font-weight:700;margin-bottom:8px;">Nessuna cartella</h3>
+                    <p style="color:var(--iris-text-muted);font-size:0.875rem;margin-bottom:20px;">Crea la tua prima cartella per iniziare</p>
+                    <button class="btn-iris btn-iris-primary" onclick="openCreateModal()"><i class="bi bi-folder-plus"></i> Crea cartella</button>
+                </div>
+            </div>
+
+            <!-- FOLDER VIEW -->
+            <div id="folderView" style="display:none;">
+                <nav class="iris-breadcrumb">
+                    <a href="#" onclick="showDashboard()"><i class="bi bi-grid-3x3-gap me-1"></i>Dashboard</a>
+                    <span class="iris-breadcrumb-sep"><i class="bi bi-chevron-right"></i></span>
+                    <span class="iris-breadcrumb-current" id="breadcrumbFolder"></span>
+                </nav>
+
+                <div class="page-header">
+                    <div>
+                        <div class="page-title" id="folderViewTitle"></div>
+                        <div class="page-subtitle" id="fileCountLabel">…</div>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn-iris btn-iris-ghost btn-iris-sm" onclick="showDashboard()"><i class="bi bi-arrow-left"></i> Indietro</button>
+                        <button class="btn-iris btn-iris-primary btn-iris-sm" onclick="document.getElementById('fileInput').click()"><i class="bi bi-upload"></i> Carica</button>
+                    </div>
+                </div>
+
+                <!-- Upload zone -->
+                <div style="margin-bottom:24px;">
+                    <div class="iris-upload-zone" id="uploadZone"
+                         onclick="document.getElementById('fileInput').click()"
+                         ondragover="event.preventDefault();this.classList.add('drag-over')"
+                         ondrop="handleDrop(event)"
+                         ondragleave="handleDragLeave(event)">
+                        <div class="iris-upload-icon"><i class="bi bi-cloud-upload"></i></div>
+                        <p style="font-size:0.9375rem;font-weight:700;color:var(--iris-text-primary);margin-bottom:4px;">Trascina i file qui</p>
+                        <p style="font-size:0.8125rem;color:var(--iris-text-muted);">oppure clicca per selezionare · Max 15 GB</p>
+                        <input type="file" id="fileInput" style="display:none;" multiple onchange="uploadFiles(this.files)">
+                    </div>
+                    <div class="upload-progress-wrap" id="uploadProgressWrap">
+                        <div class="upload-progress-info">
+                            <span id="uploadFileName">…</span>
+                            <span id="uploadPercent">0%</span>
+                        </div>
+                        <div class="iris-progress"><div class="iris-progress-bar" id="uploadProgressBar" style="width:0%"></div></div>
+                    </div>
+                </div>
+
+                <!-- Files -->
+                <div id="skeletonFiles">
+                    <div class="skeleton file-skeleton"></div>
+                    <div class="skeleton file-skeleton"></div>
+                    <div class="skeleton file-skeleton"></div>
+                </div>
+                <div class="file-list iris-stagger" id="fileList" style="display:none;"></div>
+                <div class="iris-empty-state" id="emptyFiles" style="display:none;">
+                    <div class="iris-empty-icon"><i class="bi bi-file-earmark-x"></i></div>
+                    <h3 style="font-size:1.0625rem;font-weight:700;margin-bottom:8px;">Nessun file</h3>
+                    <p style="color:var(--iris-text-muted);font-size:0.875rem;">Carica il tuo primo file in questa cartella</p>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<!-- ===== MODAL CREATE FOLDER ===== -->
+<div class="iris-modal-overlay" id="createModal" style="display:none;" onclick="if(event.target===this)closeModal()">
+    <div class="iris-modal" onclick="event.stopPropagation()">
+        <div class="iris-modal-header">
+            <span class="iris-modal-title"><i class="bi bi-folder-plus me-2" style="color:var(--iris-accent);"></i>Nuova Cartella</span>
+            <button class="iris-modal-close" onclick="closeModal()"><i class="bi bi-x"></i></button>
+        </div>
+
+        <div class="iris-input-group">
+            <label>Nome cartella *</label>
+            <input type="text" id="newFolderName" class="iris-input" placeholder="Es. Documenti Lavoro" maxlength="255">
+        </div>
+        <div class="iris-input-group">
+            <label>Descrizione (opzionale)</label>
+            <input type="text" id="newFolderDesc" class="iris-input" placeholder="Breve descrizione…" maxlength="500">
+        </div>
+
+        <div style="margin: 0 0 18px;">
+            <label class="iris-toggle" style="cursor:pointer;">
+                <input type="checkbox" id="isEncrypted" onchange="document.getElementById('pwdField').style.display=this.checked?'block':'none'">
+                <span class="iris-toggle-track"><span class="iris-toggle-thumb"></span></span>
+                <span class="iris-toggle-label"><i class="bi bi-shield-lock me-1"></i>Cartella cifrata</span>
+            </label>
+        </div>
+
+        <div id="pwdField" style="display:none;" class="iris-input-group">
+            <label>Password cifratura *</label>
+            <input type="password" id="newFolderPassword" class="iris-input" placeholder="Password sicura…" autocomplete="new-password">
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:8px;">
+            <button class="btn-iris btn-iris-ghost" style="flex:1;" onclick="closeModal()">Annulla</button>
+            <button class="btn-iris btn-iris-primary" style="flex:2;" onclick="createFolder()"><i class="bi bi-plus-lg"></i> Crea cartella</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL EDIT FOLDER ===== -->
+<div class="iris-modal-overlay" id="editModal" style="display:none;" onclick="if(event.target===this)closeEditModal()">
+    <div class="iris-modal" onclick="event.stopPropagation()">
+        <div class="iris-modal-header">
+            <span class="iris-modal-title"><i class="bi bi-pencil me-2" style="color:var(--iris-accent);"></i>Modifica Cartella</span>
+            <button class="iris-modal-close" onclick="closeEditModal()"><i class="bi bi-x"></i></button>
+        </div>
+        <div class="iris-input-group">
+            <label>Nome cartella *</label>
+            <input type="text" id="editFolderName" class="iris-input" placeholder="Nome cartella" maxlength="255">
+        </div>
+        <div class="iris-input-group">
+            <label>Descrizione (opzionale)</label>
+            <input type="text" id="editFolderDesc" class="iris-input" placeholder="Breve descrizione…" maxlength="500">
+        </div>
+        <div class="iris-input-group">
+            <label>Icona</label>
+            <div class="icon-pick-grid" id="editIconGrid"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:8px;">
+            <button class="btn-iris btn-iris-ghost" style="flex:1;" onclick="closeEditModal()">Annulla</button>
+            <button class="btn-iris btn-iris-primary" style="flex:2;" onclick="saveEditFolder()"><i class="bi bi-check-lg"></i> Salva</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== TOAST CONTAINER ===== -->
+<div class="iris-toast-container" id="toastContainer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// =====================================================================
+// THEME
+// =====================================================================
+function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    document.getElementById('theme-icon').className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+    localStorage.setItem('iris-theme', isDark ? 'light' : 'dark');
+}
+(function() {
+    const saved = localStorage.getItem('iris-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    const icon = document.getElementById('theme-icon');
+    if (icon) icon.className = saved === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+})();
+
+// =====================================================================
+// SECURITY: HTML ESCAPE
+// =====================================================================
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(String(str)));
+    return div.innerHTML;
+}
+
+// =====================================================================
+// TOAST
+// =====================================================================
+function showToast(type, title, msg, duration = 4500) {
+    const icons = { success:'bi-check-circle-fill', error:'bi-x-circle-fill', info:'bi-info-circle-fill', warning:'bi-exclamation-triangle-fill' };
+    const t = document.createElement('div');
+    t.className = `iris-toast iris-toast-${type}`;
+    t.innerHTML = `<div class="iris-toast-icon"><i class="bi ${icons[type]||'bi-bell-fill'}"></i></div>
+        <div class="iris-toast-body"><div class="iris-toast-title">${escapeHtml(title)}</div>${msg?`<div class="iris-toast-msg">${escapeHtml(msg)}</div>`:''}</div>
+        <button class="iris-toast-close" onclick="removeToast(this.parentElement)"><i class="bi bi-x"></i></button>`;
+    document.getElementById('toastContainer').appendChild(t);
+    setTimeout(() => removeToast(t), duration);
+}
+function removeToast(t) {
+    if (!t?.parentElement) return;
+    t.classList.add('removing');
+    setTimeout(() => t.remove(), 300);
+}
+
+// =====================================================================
+// STATE
+// =====================================================================
+let currentFolderId = null;
+let currentFolderName = '';
+let allFolders = [];
+let allFiles = [];
+
+// =====================================================================
+// INIT
+// =====================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    {% if folder %}
+        openFolder({{ folder.id }}, {{ folder.name|tojson }});
+    {% else %}
+        loadDashboard();
+    {% endif %}
+    loadStats();
+    loadDiskInfo();
+    loadNetworkInfo();
+});
+
+// =====================================================================
+// DASHBOARD
+// =====================================================================
+async function loadDashboard() {
+    showDashboard();
+    document.getElementById('skeletonFolders').style.display = 'grid';
+    document.getElementById('foldersGrid').style.display = 'none';
+    document.getElementById('emptyFolders').style.display = 'none';
+    try {
+        const res = await fetch('/api/folders');
+        if (res.status === 401) { window.location.href = '/login'; return; }
+        if (!res.ok) throw new Error('Server error');
+        allFolders = await res.json();
+        renderFolders(allFolders);
+    } catch (e) {
+        showToast('error', 'Errore', 'Impossibile caricare le cartelle');
+        document.getElementById('skeletonFolders').style.display = 'none';
+    }
+}
+
+function renderFolders(folders) {
+    document.getElementById('skeletonFolders').style.display = 'none';
+    const grid = document.getElementById('foldersGrid');
+    const empty = document.getElementById('emptyFolders');
+    document.getElementById('folderCountLabel').textContent = `${folders.length} cartell${folders.length === 1 ? 'a' : 'e'}`;
+    if (!folders.length) { grid.style.display = 'none'; empty.style.display = 'block'; return; }
+    grid.style.display = 'grid'; empty.style.display = 'none';
+    grid.innerHTML = folders.map(f => {
+        const enc = f.is_encrypted;
+        const icon = enc ? 'bi-folder-lock' : (f.icon || 'bi-folder-fill');
+        return `<div class="folder-card" data-folder-id="${f.id}">
+            <div class="folder-card-actions">
+                <button class="card-edit-btn" data-edit-id="${f.id}" title="Modifica"><i class="bi bi-pencil"></i></button>
+                <button class="card-del-btn" data-delete-id="${f.id}" title="Elimina"><i class="bi bi-trash3"></i></button>
+            </div>
+            <div class="folder-card-icon-wrap ${enc?'folder-icon-encrypt':'folder-icon-normal'}">
+                <i class="bi ${icon}"></i>
+            </div>
+            <div class="folder-card-name">${escapeHtml(f.name)}</div>
+            <div class="folder-card-meta">
+                <span class="iris-badge iris-badge-neutral">${f.files_count||0} file</span>
+                ${enc?'<span class="iris-badge iris-badge-accent"><i class="bi bi-lock-fill me-1"></i>Cifrata</span>':''}
+            </div>
+            ${f.description?`<div class="folder-card-desc">${escapeHtml(f.description)}</div>`:''}
+        </div>`;
+    }).join('');
+
+    // Attach click handlers via event delegation (safe: uses data attributes, not inline JS)
+    grid.querySelectorAll('.folder-card').forEach(card => {
+        const fid = parseInt(card.dataset.folderId, 10);
+        const folder = folders.find(f => f.id === fid);
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('[data-delete-id]') || e.target.closest('[data-edit-id]')) return;
+            openFolder(fid, folder ? folder.name : '');
+        });
+    });
+    grid.querySelectorAll('[data-delete-id]').forEach(btn => {
+        const fid = parseInt(btn.dataset.deleteId, 10);
+        btn.addEventListener('click', (e) => { e.stopPropagation(); deleteFolder(fid, e); });
+    });
+    grid.querySelectorAll('[data-edit-id]').forEach(btn => {
+        const fid = parseInt(btn.dataset.editId, 10);
+        btn.addEventListener('click', (e) => { e.stopPropagation(); openEditModal(fid); });
+    });
+}
+
+function showDashboard() {
+    currentFolderId = null;
+    document.getElementById('dashboardView').style.display = 'block';
+    document.getElementById('folderView').style.display = 'none';
+    document.getElementById('uploadTriggerBtn').style.display = 'none';
+    document.getElementById('topbarTitle').innerHTML = 'Dashboard <span>— Le tue cartelle</span>';
+}
+
+function refreshAll() {
+    if (currentFolderId) { loadFiles(currentFolderId); } else { loadDashboard(); }
+    loadStats(); loadDiskInfo();
+}
+
+// =====================================================================
+// FOLDER VIEW
+// =====================================================================
+async function openFolder(folderId, folderName) {
+    const folder = allFolders.find(f => f.id === folderId);
+    if (folder && folder.is_encrypted) { window.location.href = `/folder/${folderId}`; return; }
+
+    currentFolderId = folderId;
+    currentFolderName = folderName || 'Cartella';
+    document.getElementById('dashboardView').style.display = 'none';
+    document.getElementById('folderView').style.display = 'block';
+    document.getElementById('uploadTriggerBtn').style.display = 'flex';
+    document.getElementById('folderViewTitle').textContent = currentFolderName;
+    document.getElementById('breadcrumbFolder').textContent = currentFolderName;
+    document.getElementById('topbarTitle').innerHTML = `<a href="#" onclick="showDashboard()">Dashboard</a> <span>/ ${escapeHtml(currentFolderName)}</span>`;
+    await loadFiles(folderId);
+}
+
+async function loadFiles(folderId) {
+    document.getElementById('skeletonFiles').style.display = 'block';
+    document.getElementById('fileList').style.display = 'none';
+    document.getElementById('emptyFiles').style.display = 'none';
+    try {
+        const res = await fetch(`/api/folders/${folderId}/files?per_page=200`);
+        if (res.status === 401) { window.location.href = '/login'; return; }
+        const data = await res.json();
+        allFiles = data.files || [];
+        renderFiles(allFiles);
+    } catch (e) {
+        showToast('error', 'Errore', 'Impossibile caricare i file');
+    }
+}
+
+function getFileType(name) {
+    const ext = (name||'').split('.').pop().toLowerCase();
+    if (['txt','doc','docx','pdf','md','csv','xlsx','xls'].includes(ext)) return 'doc';
+    if (['jpg','jpeg','png','gif','svg','webp','bmp'].includes(ext)) return 'img';
+    if (['mp4','avi','mkv','mov','wmv'].includes(ext)) return 'video';
+    if (['mp3','wav','flac','aac','m4a'].includes(ext)) return 'audio';
+    if (['zip','rar','7z','tar','gz'].includes(ext)) return 'archive';
+    if (['py','js','ts','html','css','json','xml','java','cpp','c','sh'].includes(ext)) return 'code';
+    return 'default';
+}
+function getFileIcon(t) {
+    return {doc:'bi-file-text',img:'bi-file-image',video:'bi-file-play',audio:'bi-file-music',archive:'bi-file-zip',code:'bi-file-code'}[t]||'bi-file-earmark';
+}
+function getFileColor(t) {
+    return {doc:'#3b82f6',img:'#10b981',video:'#8b5cf6',audio:'#f59e0b',archive:'#ef4444',code:'#06b6d4'}[t]||'#94a3b8';
+}
+
+function renderFiles(files) {
+    document.getElementById('skeletonFiles').style.display = 'none';
+    const list = document.getElementById('fileList');
+    const empty = document.getElementById('emptyFiles');
+    document.getElementById('fileCountLabel').textContent = `${files.length} file`;
+    if (!files.length) { list.style.display = 'none'; empty.style.display = 'block'; return; }
+    list.style.display = 'flex'; empty.style.display = 'none';
+    list.innerHTML = files.map(f => {
+        const t = getFileType(f.name);
+        const icon = getFileIcon(t);
+        const color = getFileColor(t);
+        const size = formatBytes(f.size);
+        const date = new Date(f.created_at).toLocaleDateString('it-IT');
+        return `<div class="file-row" data-file-id="${f.id}">
+            <div class="file-type-bar ftype-${t}"></div>
+            <div class="file-icon-wrap" style="background:${color}20;">
+                <i class="bi ${icon}" style="color:${color};"></i>
+            </div>
+            <div class="file-info">
+                <div class="file-name">${escapeHtml(f.name)}</div>
+                <div class="file-meta">${size} · ${date}</div>
+            </div>
+            <div class="file-actions">
+                <button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="preview" title="Anteprima"><i class="bi bi-eye"></i></button>
+                <button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="download" title="Scarica"><i class="bi bi-download"></i></button>
+                <button class="btn-iris btn-iris-danger btn-iris-icon btn-iris-sm" data-action="delete" title="Elimina"><i class="bi bi-trash3"></i></button>
+            </div>
+        </div>`;
+    }).join('');
+
+    // Attach handlers via event delegation — no inline JS, safe for any filename
+    list.querySelectorAll('.file-row').forEach(row => {
+        const fid = parseInt(row.dataset.fileId, 10);
+        const file = files.find(f => f.id === fid);
+        row.querySelector('[data-action="preview"]').addEventListener('click', () => openPreview(fid, file ? file.name : ''));
+        row.querySelector('[data-action="download"]').addEventListener('click', () => downloadFile(fid));
+        row.querySelector('[data-action="delete"]').addEventListener('click', () => deleteFile(fid));
+    });
+}
+
+// =====================================================================
+// SEARCH
+// =====================================================================
+function handleSearch(q) {
+    q = q.toLowerCase();
+    if (currentFolderId) { renderFiles(allFiles.filter(f => f.name.toLowerCase().includes(q))); }
+    else { renderFolders(allFolders.filter(f => f.name.toLowerCase().includes(q) || (f.description||'').toLowerCase().includes(q))); }
+}
+
+// =====================================================================
+// CREATE FOLDER
+// =====================================================================
+function openCreateModal() {
+    const m = document.getElementById('createModal');
+    m.style.display = 'flex';
+    ['newFolderName','newFolderDesc','newFolderPassword'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+    document.getElementById('isEncrypted').checked = false;
+    document.getElementById('pwdField').style.display = 'none';
+    setTimeout(() => document.getElementById('newFolderName').focus(), 80);
+}
+function closeModal() { document.getElementById('createModal').style.display = 'none'; }
+
+async function createFolder() {
+    const name = document.getElementById('newFolderName').value.trim();
+    const description = document.getElementById('newFolderDesc').value.trim();
+    const isEncrypted = document.getElementById('isEncrypted').checked;
+    const password = document.getElementById('newFolderPassword').value;
+    if (!name) { showToast('warning', 'Attenzione', 'Inserisci un nome per la cartella'); return; }
+    if (isEncrypted && !password) { showToast('warning', 'Attenzione', 'Inserisci una password per la cartella cifrata'); return; }
+    try {
+        const res = await fetch('/api/folders', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name, description, is_encrypted: isEncrypted, password}) });
+        const data = await res.json();
+        if (data.success) { closeModal(); showToast('success', 'Cartella creata', `"${name}" creata con successo`); loadDashboard(); }
+        else { showToast('error', 'Errore', data.message || 'Impossibile creare la cartella'); }
+    } catch (e) { showToast('error', 'Errore di rete', 'Controlla la connessione'); }
+}
+
+// =====================================================================
+// EDIT FOLDER
+// =====================================================================
+let editFolderId = null;
+const FOLDER_ICONS = [
+    'bi-folder-fill','bi-folder-symlink-fill','bi-archive-fill','bi-briefcase-fill',
+    'bi-camera-fill','bi-music-note-beamed','bi-code-slash','bi-book-fill',
+    'bi-film','bi-image-fill','bi-shield-lock-fill','bi-star-fill',
+    'bi-heart-fill','bi-cloud-fill','bi-database-fill','bi-gear-fill',
+    'bi-person-fill','bi-house-fill','bi-lock-fill','bi-bookmark-fill',
+];
+
+function openEditModal(folderId) {
+    editFolderId = folderId;
+    const folder = allFolders.find(f => f.id === folderId);
+    if (!folder) return;
+    document.getElementById('editFolderName').value = folder.name;
+    document.getElementById('editFolderDesc').value = folder.description || '';
+    const currentIcon = folder.icon || 'bi-folder-fill';
+    const grid = document.getElementById('editIconGrid');
+    grid.innerHTML = FOLDER_ICONS.map(ic =>
+        `<button type="button" class="icon-pick-btn${ic===currentIcon?' selected':''}" data-icon="${ic}" title="${ic}">
+            <i class="bi ${ic}"></i>
+        </button>`
+    ).join('');
+    grid.querySelectorAll('.icon-pick-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            grid.querySelectorAll('.icon-pick-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+        });
+    });
+    document.getElementById('editModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('editFolderName').focus(), 80);
+}
+
+function closeEditModal() { document.getElementById('editModal').style.display = 'none'; editFolderId = null; }
+
+async function saveEditFolder() {
+    if (!editFolderId) return;
+    const name = document.getElementById('editFolderName').value.trim();
+    const description = document.getElementById('editFolderDesc').value.trim();
+    const selectedBtn = document.getElementById('editIconGrid').querySelector('.icon-pick-btn.selected');
+    const icon = selectedBtn ? selectedBtn.dataset.icon : 'bi-folder-fill';
+    if (!name) { showToast('warning', 'Attenzione', 'Il nome non può essere vuoto'); return; }
+    try {
+        const res = await fetch(`/api/folders/${editFolderId}`, {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({name, description, icon})
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeEditModal();
+            showToast('success', 'Salvato', `"${name}" aggiornata`);
+            loadDashboard();
+        } else { showToast('error', 'Errore', data.message || 'Impossibile salvare'); }
+    } catch (e) { showToast('error', 'Errore di rete', 'Controlla la connessione'); }
+}
+
+// =====================================================================
+// DELETE FOLDER / FILE
+// =====================================================================
+async function deleteFolder(folderId, event) {
+    event.stopPropagation();
+    const folder = allFolders.find(f => f.id === folderId);
+    const name = folder ? folder.name : 'questa cartella';
+    if (!confirm(`Eliminare "${name}" e tutti i suoi file? Azione irreversibile.`)) return;
+    try {
+        const res = await fetch(`/api/folders/${folderId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) { showToast('success', 'Eliminata', `"${name}" eliminata`); loadDashboard(); }
+        else { showToast('error', 'Errore', data.message || 'Impossibile eliminare'); }
+    } catch (e) { showToast('error', 'Errore di rete', 'Controlla la connessione'); }
+}
+
+async function deleteFile(fileId) {
+    const file = allFiles.find(f => f.id === fileId);
+    const name = file ? file.name : 'questo file';
+    if (!confirm(`Eliminare "${name}"?`)) return;
+    try {
+        const res = await fetch(`/api/files/${fileId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) { showToast('success', 'Eliminato', name); loadFiles(currentFolderId); loadStats(); loadDiskInfo(); }
+        else { showToast('error', 'Errore', data.message || 'Impossibile eliminare'); }
+    } catch (e) { showToast('error', 'Errore di rete', 'Controlla la connessione'); }
+}
+
+function downloadFile(fileId) { window.location.href = `/api/files/${fileId}/download`; }
+
+// =====================================================================
+// UPLOAD
+// =====================================================================
+function handleDrop(event) {
+    event.preventDefault();
+    document.getElementById('uploadZone').classList.remove('drag-over');
+    uploadFiles(event.dataTransfer.files);
+}
+
+function handleDragLeave(event) {
+    // Only remove the class if the pointer actually left the upload zone
+    // (not just moved over a child element inside it)
+    const zone = document.getElementById('uploadZone');
+    if (!zone.contains(event.relatedTarget)) {
+        zone.classList.remove('drag-over');
+    }
+}
+
+async function uploadFiles(fileList) {
+    if (!currentFolderId) { showToast('warning', 'Attenzione', 'Apri una cartella prima di caricare'); return; }
+    if (!fileList || !fileList.length) return;
+    for (const file of fileList) { await uploadSingleFile(file); }
+    loadFiles(currentFolderId); loadStats(); loadDiskInfo();
+}
+
+async function uploadSingleFile(file) {
+    const pw = document.getElementById('uploadProgressWrap');
+    const pb = document.getElementById('uploadProgressBar');
+    const pn = document.getElementById('uploadFileName');
+    const pp = document.getElementById('uploadPercent');
+    pw.style.display = 'block'; pn.textContent = file.name; pb.style.width = '0%'; pp.textContent = '0%';
+
+    return new Promise(resolve => {
+        const fd = new FormData();
+        fd.append('file', file);
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener('progress', e => {
+            if (e.lengthComputable) { const p = Math.round(e.loaded/e.total*100); pb.style.width=`${p}%`; pp.textContent=`${p}%`; }
+        });
+        xhr.addEventListener('load', () => {
+            setTimeout(() => { pw.style.display = 'none'; }, 600);
+            try {
+                const data = JSON.parse(xhr.responseText);
+                if (data.success) showToast('success', 'Caricato', file.name);
+                else showToast('error', 'Upload fallito', data.message || file.name);
+            } catch(e) { showToast('error', 'Errore', 'Risposta non valida'); }
+            resolve();
+        });
+        xhr.addEventListener('error', () => { pw.style.display='none'; showToast('error','Errore di rete',`Impossibile caricare ${file.name}`); resolve(); });
+        xhr.open('POST', `/api/folders/${currentFolderId}/upload`);
+        xhr.send(fd);
+    });
+}
+
+// =====================================================================
+// SIDEBAR DATA
+// =====================================================================
+async function loadStats() {
+    try {
+        const res = await fetch('/api/stats');
+        if (!res.ok) return;
+        const d = await res.json();
+        document.getElementById('statFolders').textContent = d.folders ?? '—';
+        document.getElementById('statFiles').textContent = d.files ?? '—';
+    } catch(e) {}
+}
+
+async function loadDiskInfo() {
+    try {
+        const res = await fetch('/api/disk-space');
+        if (!res.ok) return;
+        const d = await res.json();
+        document.getElementById('diskInfo').textContent = `${d.used_human} / ${d.total_human}`;
+        const bar = document.getElementById('diskProgress');
+        bar.style.width = `${d.percent_used}%`;
+        // Visual feedback on disk usage: orange > 75%, red > 90%
+        bar.classList.remove('warning', 'danger');
+        if (d.percent_used >= 90) bar.classList.add('danger');
+        else if (d.percent_used >= 75) bar.classList.add('warning');
+    } catch(e) { document.getElementById('diskInfo').textContent = 'N/D'; }
+}
+
+async function loadNetworkInfo() {
+    try {
+        const res = await fetch('/api/network-info');
+        if (!res.ok) return;
+        const d = await res.json();
+        document.getElementById('netLocal').textContent  = d.local_url  || '—';
+        document.getElementById('netPublic').textContent = d.public_url || '—';
+        document.getElementById('netFtp').textContent    = `${d.local_ip}:${d.ftp_port}`;
+    } catch(e) {
+        ['netLocal','netPublic','netFtp'].forEach(id => document.getElementById(id).textContent = '—');
+    }
+}
+
+// =====================================================================
+// UTILS
+// =====================================================================
+function formatBytes(bytes) {
+    if (!bytes) return '0 B';
+    const u = ['B','KB','MB','GB'];
+    let i = 0;
+    while (bytes >= 1024 && i < u.length-1) { bytes/=1024; i++; }
+    return `${bytes.toFixed(1)} ${u[i]}`;
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        closeModal();
+        closeEditModal();
+        closePreview();
+    }
+    if (e.key === 'Enter' && document.getElementById('createModal').style.display !== 'none') createFolder();
+    if (e.key === 'Enter' && document.getElementById('editModal').style.display !== 'none') saveEditFolder();
+});
+
+// =====================================================================
+// PREVIEW
+// =====================================================================
+function openPreview(fileId, filename) {
+    const overlay = document.getElementById('previewOverlay');
+    document.getElementById('previewTitle').innerHTML = `<i class="bi bi-eye"></i>${escapeHtml(filename)}`;
+    document.getElementById('previewBody').innerHTML = `<div class="preview-loading"><div class="preview-spinner"></div><div>Caricamento anteprima…</div></div>`;
+    document.getElementById('previewFooter').innerHTML = '';
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    fetch(`/api/files/${fileId}/preview`)
+        .then(r => r.json())
+        .then(data => renderPreview(data, fileId, filename))
+        .catch(err => {
+            document.getElementById('previewBody').innerHTML = `<div class="preview-loading" style="color:var(--iris-danger);"><i class="bi bi-x-circle" style="font-size:2rem;display:block;margin:0 auto 12px;"></i>Errore: ${escapeHtml(err.message)}</div>`;
+        });
+}
+
+function renderPreview(data, fileId, filename) {
+    const body   = document.getElementById('previewBody');
+    const footer = document.getElementById('previewFooter');
+
+    footer.innerHTML = `<button class="btn-iris btn-iris-ghost btn-iris-sm" onclick="closePreview()">Chiudi</button>
+        <button class="btn-iris btn-iris-primary btn-iris-sm" onclick="window.location.href='/api/files/${fileId}/download'"><i class="bi bi-download"></i> Scarica</button>`;
+
+    if (data.type === 'image') {
+        body.innerHTML = `<img src="${data.url}" class="preview-img" alt="${escapeHtml(filename)}" loading="lazy">`;
+        return;
+    }
+    if (data.type === 'text') {
+        body.innerHTML = `<pre class="preview-code">${escapeHtml(data.content)}</pre>`;
+        return;
+    }
+    if (data.type === 'zip') {
+        const truncNote = data.total > data.contents.length
+            ? `<div style="font-size:0.8rem;color:var(--iris-text-muted);padding:8px 12px;">Mostrati ${data.contents.length} di ${data.total} voci</div>` : '';
+        const rows = data.contents.map(f => {
+            const cls = f.is_dir ? 'zip-row-dir' : '';
+            const dlBtn = f.is_dir ? '' : `<button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm zip-dl-btn" data-zip-path="${escapeHtml(f.name)}" title="Scarica file"><i class="bi bi-download"></i></button>`;
+            return `<tr class="${cls}"><td>${escapeHtml(f.name)}</td><td>${f.is_dir ? '—' : f.size}</td><td>${f.is_dir ? '—' : f.compressed}</td><td>${dlBtn}</td></tr>`;
+        }).join('');
+        body.innerHTML = `<table class="zip-table">
+            <thead><tr><th>Nome</th><th>Dimensione</th><th>Compressa</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>${truncNote}`;
+        body.querySelectorAll('.zip-dl-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                window.location.href = `/api/files/${fileId}/zip-extract?path=${encodeURIComponent(btn.dataset.zipPath)}`;
+            });
+        });
+        return;
+    }
+    body.innerHTML = `<div class="preview-loading" style="color:var(--iris-text-muted);">
+        <i class="bi bi-file-earmark" style="font-size:3rem;display:block;margin:0 auto 12px;opacity:0.4;"></i>
+        <div style="font-size:0.875rem;">Anteprima non disponibile per questo tipo di file.</div>
+        <div style="font-size:0.8rem;margin-top:6px;">Usa il pulsante Scarica per visualizzarlo.</div>
+    </div>`;
+}
+
+function closePreview() {
+    document.getElementById('previewOverlay').classList.remove('open');
+    document.body.style.overflow = '';
+}
+</script>
+
+<!-- Preview modal -->
+<div class="preview-overlay" id="previewOverlay" onclick="if(event.target===this)closePreview()">
+    <div class="preview-modal">
+        <div class="preview-header">
+            <div class="preview-title" id="previewTitle"><i class="bi bi-eye"></i>Anteprima</div>
+            <button class="iris-modal-close" onclick="closePreview()"><i class="bi bi-x"></i></button>
+        </div>
+        <div class="preview-body" id="previewBody">
+            <div class="preview-loading"><div class="preview-spinner"></div><div>Caricamento…</div></div>
+        </div>
+        <div class="preview-footer" id="previewFooter"></div>
+    </div>
+</div>
+</body>
+</html>

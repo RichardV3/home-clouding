@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # MySQL Database
+  # ============================================================================
+  db:
+    image: mysql:8.0
+    container_name: iris_ve_db
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: iris_ve
+      MYSQL_USER: iris_user
+      MYSQL_PASSWORD: iris_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - iris_network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Flask Application
+  # ============================================================================
+  app:
+    build: .
+    container_name: iris_ve_app
+    env_file:
+      - env
+    environment:
+      FLASK_APP: app.py
+      DATABASE_URL: mysql+pymysql://iris_user:iris_password@db:3306/iris_ve
+      ENV: production
+      FTP_ENABLED: "False"  # FTP runs in dedicated container below
+    ports:
+      - "5000:5000"
+      - "25565:5000"  # Direct external access (router port forwarding)
+    volumes:
+      - ./uploads:/app/uploads
+      - ./backups:/app/backups
+      - ./logs:/app/logs
+      - ./static:/app/static
+      - ./templates:/app/templates
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - iris_network
+    restart: unless-stopped
+
+  # ============================================================================
+  # Nginx Reverse Proxy (HTTP on port 80)
+  # NOTE: SSL disabled — add certs to ./ssl/ and update nginx.conf to enable HTTPS
+  # ============================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: iris_ve_nginx
+    ports:
+      - "80:80"
+      # Uncomment when SSL is configured:
+      # - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Uncomment when SSL certs are placed in ./ssl/:
+      # - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    networks:
+      - iris_network
+    restart: unless-stopped
+
+  # ============================================================================
+  # FTP Server (FileZilla access to uploads folder)
+  # Connect via FileZilla: host=YOUR_IP, port=2121, user/pass from env FTP_USER/FTP_PASSWORD
+  # Passive mode: ports 60000-60100 (must be open on router/firewall)
+  # ============================================================================
+  ftp:
+    build: .
+    container_name: iris_ve_ftp
+    command: >
+      python -c "
+      import sys, os;
+      sys.path.insert(0, '/app');
+      os.chdir('/app');
+      from app import start_ftp_server;
+      start_ftp_server()
+      "
+    env_file:
+      - env
+    environment:
+      DATABASE_URL: mysql+pymysql://iris_user:iris_password@db:3306/iris_ve
+      ENV: production
+      FTP_ENABLED: "True"
+      FTP_PORT: "2121"
+    ports:
+      - "2121:2121"
+      - "60000-60100:60000-60100"
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - iris_network
+    restart: unless-stopped
+    depends_on:
+      - app
+
+volumes:
+  db_data:
+
+networks:
+  iris_network:
+    driver: bridge

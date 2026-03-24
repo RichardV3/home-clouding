@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentazione — IRIS-VE</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%236366f1'/><text x='50%25' y='55%25' font-size='18' text-anchor='middle' dominant-baseline='middle' fill='white'>I</text></svg>">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='iris-ve.css') }}">
+
+    <style>
+        /* ===== LAYOUT ===== */
+        .app-layout { display: flex; min-height: 100vh; }
+
+        /* ===== SIDEBAR ===== */
+        .sidebar {
+            width: 280px; flex-shrink: 0;
+            background: rgba(10,14,26,0.88);
+            backdrop-filter: var(--iris-blur); -webkit-backdrop-filter: var(--iris-blur);
+            border-right: 1px solid var(--iris-border);
+            display: flex; flex-direction: column;
+            position: fixed; top: 0; left: 0; height: 100vh;
+            overflow-y: auto; z-index: 50;
+            transition: transform 0.3s var(--iris-ease);
+        }
+        [data-theme="light"] .sidebar { background: rgba(238,242,255,0.92); }
+        .sidebar-header { padding: 22px 20px 18px; border-bottom: 1px solid var(--iris-border); }
+        .sidebar-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        .sidebar-brand-icon { width: 38px; height: 38px; background: var(--iris-accent-grad); border-radius: var(--iris-radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: white; box-shadow: 0 4px 12px rgba(99,102,241,0.4); flex-shrink: 0; }
+        .sidebar-brand-text { font-size: 1.1875rem; font-weight: 800; letter-spacing: -0.02em; color: var(--iris-text-primary); }
+        .sidebar-brand-text span { background: var(--iris-accent-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .sidebar-nav { padding: 14px 12px; flex: 1; }
+        .sidebar-section-label { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--iris-text-muted); padding: 0 8px; margin-bottom: 6px; margin-top: 14px; }
+        .sidebar-section-label:first-child { margin-top: 0; }
+        .sidebar-link { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--iris-radius-md); color: var(--iris-text-secondary); text-decoration: none; font-size: 0.875rem; font-weight: 500; transition: var(--iris-transition); cursor: pointer; border: none; background: none; width: 100%; text-align: left; }
+        .sidebar-link:hover, .sidebar-link.active { background: rgba(99,102,241,0.12); color: var(--iris-text-primary); }
+        .sidebar-link.active { color: var(--iris-accent-3); }
+        .sidebar-link i { font-size: 1.05rem; width: 20px; text-align: center; flex-shrink: 0; }
+        .sidebar-link.danger { color: var(--iris-danger); }
+        .sidebar-link.danger:hover { background: rgba(239,68,68,0.1); color: var(--iris-danger); }
+
+        /* TOC panel */
+        .sidebar-toc { padding: 8px 12px 14px; border-top: 1px solid var(--iris-border); flex: 1; overflow-y: auto; }
+        .toc-label { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--iris-text-muted); padding: 8px 8px 6px; }
+        .toc-link { display: block; padding: 4px 8px; font-size: 0.8125rem; color: var(--iris-text-muted); text-decoration: none; border-radius: var(--iris-radius-sm); transition: color 0.2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .toc-link:hover { color: var(--iris-text-primary); background: rgba(99,102,241,0.08); }
+        .toc-link.toc-h3 { padding-left: 18px; font-size: 0.75rem; }
+
+        .sidebar-footer { padding: 10px 12px 14px; border-top: 1px solid var(--iris-border); }
+
+        /* ===== MAIN ===== */
+        .main-content { flex: 1; margin-left: 280px; display: flex; flex-direction: column; min-height: 100vh; }
+        .topbar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 12px; padding: 14px 28px; background: rgba(10,14,26,0.78); backdrop-filter: var(--iris-blur); -webkit-backdrop-filter: var(--iris-blur); border-bottom: 1px solid var(--iris-border); }
+        [data-theme="light"] .topbar { background: rgba(238,242,255,0.88); }
+        .topbar-title { font-size: 1.0625rem; font-weight: 700; color: var(--iris-text-primary); flex: 1; }
+        .topbar-title a { color: var(--iris-text-muted); text-decoration: none; transition: color 0.2s; }
+        .topbar-title a:hover { color: var(--iris-text-primary); }
+        .topbar-title .sep { color: var(--iris-text-muted); font-weight: 400; margin: 0 6px; }
+        .content-area { padding: 28px 32px; flex: 1; max-width: 860px; }
+
+        /* ===== MARKDOWN CONTENT ===== */
+        .doc-content h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.03em; color: var(--iris-text-primary); margin: 0 0 8px; padding-bottom: 12px; border-bottom: 1px solid var(--iris-border); }
+        .doc-content h1:not(:first-child) { margin-top: 40px; }
+        .doc-content h2 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; color: var(--iris-text-primary); margin: 32px 0 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(99,102,241,0.15); scroll-margin-top: 80px; }
+        .doc-content h3 { font-size: 1.0625rem; font-weight: 700; color: var(--iris-text-primary); margin: 24px 0 10px; scroll-margin-top: 80px; }
+        .doc-content h4 { font-size: 0.9375rem; font-weight: 700; color: var(--iris-text-secondary); margin: 20px 0 8px; }
+        .doc-content p { color: var(--iris-text-secondary); line-height: 1.75; margin-bottom: 14px; font-size: 0.9375rem; }
+        .doc-content ul, .doc-content ol { color: var(--iris-text-secondary); margin: 12px 0 14px 22px; font-size: 0.9375rem; }
+        .doc-content li { margin-bottom: 5px; line-height: 1.6; }
+        .doc-content strong { color: var(--iris-text-primary); font-weight: 700; }
+        .doc-content em { font-style: italic; }
+        .doc-content a { color: var(--iris-accent); text-decoration: none; }
+        .doc-content a:hover { text-decoration: underline; }
+        .doc-content hr { border: none; border-top: 1px solid var(--iris-border); margin: 32px 0; }
+
+        /* inline code */
+        .doc-content code {
+            background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2);
+            border-radius: 4px; padding: 2px 6px;
+            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.825rem;
+            color: var(--iris-accent-3);
+        }
+
+        /* code blocks */
+        .doc-content pre {
+            background: var(--iris-bg-card);
+            border: 1px solid var(--iris-border);
+            border-radius: var(--iris-radius-md);
+            padding: 16px 20px; margin: 16px 0; overflow-x: auto;
+            position: relative;
+        }
+        .doc-content pre code {
+            background: none; border: none; padding: 0;
+            font-size: 0.8125rem; line-height: 1.65;
+            color: var(--iris-text-primary);
+        }
+
+        /* tables */
+        .doc-content table {
+            width: 100%; border-collapse: collapse; margin: 16px 0;
+            font-size: 0.875rem; border-radius: var(--iris-radius-md); overflow: hidden;
+        }
+        .doc-content th {
+            background: var(--iris-bg-card); font-size: 0.75rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.06em; color: var(--iris-text-muted);
+            padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--iris-border);
+        }
+        .doc-content td { padding: 10px 14px; color: var(--iris-text-secondary); border-bottom: 1px solid rgba(255,255,255,0.04); }
+        .doc-content tr:last-child td { border-bottom: none; }
+        .doc-content tr:hover td { background: var(--iris-bg-card); }
+        [data-theme="light"] .doc-content tr:hover td { background: rgba(99,102,241,0.04); }
+
+        /* blockquote */
+        .doc-content blockquote {
+            border-left: 3px solid var(--iris-accent);
+            background: var(--iris-bg-card);
+            margin: 16px 0; padding: 12px 18px;
+            border-radius: 0 var(--iris-radius-md) var(--iris-radius-md) 0;
+        }
+        .doc-content blockquote p { margin: 0; color: var(--iris-text-secondary); font-style: italic; }
+
+        /* ===== MOBILE ===== */
+        .sidebar-toggle { display: none; background: var(--iris-bg-card); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-md); width: 36px; height: 36px; align-items: center; justify-content: center; cursor: pointer; color: var(--iris-text-secondary); font-size: 1.05rem; flex-shrink: 0; }
+
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.mobile-open { transform: translateX(0); }
+            .main-content { margin-left: 0; }
+            .sidebar-toggle { display: flex; }
+            .content-area { padding: 14px 16px; }
+            .topbar { padding: 10px 14px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-layout">
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a class="sidebar-brand" href="/dashboard">
+                <div class="sidebar-brand-icon"><i class="bi bi-shield-lock-fill"></i></div>
+                <span class="sidebar-brand-text">IRIS<span>-VE</span></span>
+            </a>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="sidebar-section-label">Navigazione</div>
+            <a class="sidebar-link" href="/dashboard">
+                <i class="bi bi-grid-3x3-gap-fill"></i> Dashboard
+            </a>
+            <a class="sidebar-link active" href="/documentation">
+                <i class="bi bi-book-fill"></i> Documentazione
+            </a>
+        </nav>
+
+        <div class="sidebar-toc">
+            <div class="toc-label">In questa pagina</div>
+            <div id="tocLinks"></div>
+        </div>
+
+        <div class="sidebar-footer">
+            <a class="sidebar-link danger" href="/logout">
+                <i class="bi bi-box-arrow-left"></i> Esci
+            </a>
+        </div>
+    </aside>
+
+    <!-- ===== MAIN ===== -->
+    <main class="main-content">
+        <header class="topbar">
+            <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('mobile-open')">
+                <i class="bi bi-list"></i>
+            </button>
+            <div class="topbar-title">
+                <a href="/dashboard">Dashboard</a>
+                <span class="sep">/</span>
+                Documentazione
+            </div>
+            <button class="iris-theme-toggle" onclick="toggleTheme()" title="Cambia tema">
+                <i class="bi bi-moon-stars-fill" id="theme-icon"></i>
+            </button>
+        </header>
+
+        <div class="content-area">
+            <div class="doc-content" id="docContent">
+                <!-- Markdown rendered here by JS -->
+                <div style="text-align:center;padding:60px 20px;color:var(--iris-text-muted);">
+                    <div style="width:32px;height:32px;border:2px solid var(--iris-border);border-top-color:var(--iris-accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>
+                    Caricamento…
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- raw markdown passed from Flask as JSON string -->
+<script>const RAW_MARKDOWN = {{ content | tojson }};</script>
+
+<!-- marked.js for markdown rendering -->
+<script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// =====================================================================
+// THEME
+// =====================================================================
+function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    document.getElementById('theme-icon').className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+    localStorage.setItem('iris-theme', isDark ? 'light' : 'dark');
+}
+(function () {
+    const saved = localStorage.getItem('iris-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    const icon = document.getElementById('theme-icon');
+    if (icon) icon.className = saved === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+})();
+
+// =====================================================================
+// MARKDOWN RENDER
+// =====================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    const markdown = typeof RAW_MARKDOWN === 'string' ? RAW_MARKDOWN : '';
+
+    if (!markdown.trim()) {
+        document.getElementById('docContent').innerHTML =
+            '<p style="color:var(--iris-text-muted);">Documentazione non disponibile.</p>';
+        return;
+    }
+
+    // Configure marked
+    marked.setOptions({
+        gfm: true,
+        breaks: false,
+        pedantic: false
+    });
+
+    const html = marked.parse(markdown);
+    const docEl = document.getElementById('docContent');
+    docEl.innerHTML = html;
+
+    // Add slug IDs to all headings for anchor links
+    docEl.querySelectorAll('h1, h2, h3, h4').forEach(h => {
+        if (!h.id) {
+            h.id = h.textContent.trim()
+                .toLowerCase()
+                .replace(/[^\w\s-]/g, '')
+                .replace(/\s+/g, '-');
+        }
+    });
+
+    // Build TOC from h2/h3
+    const toc = document.getElementById('tocLinks');
+    docEl.querySelectorAll('h2, h3').forEach(h => {
+        const a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.className = 'toc-link' + (h.tagName === 'H3' ? ' toc-h3' : '');
+        a.textContent = h.textContent;
+        a.addEventListener('click', e => {
+            e.preventDefault();
+            h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        toc.appendChild(a);
+    });
+});
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.getElementById('sidebar').classList.remove('mobile-open');
+});
+</script>
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</body>
+</html>

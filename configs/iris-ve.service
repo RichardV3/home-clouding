@@ -1,0 +1,69 @@
+[Unit]
+Description=IRIS-VE v2.0 Apple-inspired Cloud Storage System
+Documentation=https://github.com/your-org/iris-ve
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=exec
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/iris-ve
+Environment=PATH=/opt/iris-ve/venv/bin
+Environment=PYTHONPATH=/opt/iris-ve
+Environment=FLASK_ENV=production
+
+# Gunicorn configuration ottimizzata
+ExecStart=/opt/iris-ve/venv/bin/gunicorn \
+    --name iris-ve \
+    --workers 4 \
+    --worker-class gevent \
+    --worker-connections 1000 \
+    --max-requests 10000 \
+    --max-requests-jitter 1000 \
+    --timeout 300 \
+    --keep-alive 5 \
+    --bind unix:/run/iris-ve.sock \
+    --pid /run/iris-ve.pid \
+    --access-logfile /var/log/iris-ve/access.log \
+    --error-logfile /var/log/iris-ve/error.log \
+    --log-level info \
+    --preload \
+    app:app
+
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/iris-ve/uploads /opt/iris-ve/backups /opt/iris-ve/logs /run /var/log/iris-ve
+
+# Security enhancements
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Restart policy
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
+# Installazione:
+# 1. sudo cp iris-ve.service /etc/systemd/system/
+# 2. sudo systemctl daemon-reload
+# 3. sudo systemctl enable iris-ve
+# 4. sudo systemctl start iris-ve
+# 5. sudo systemctl status iris-ve

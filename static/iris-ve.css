@@ -1,0 +1,994 @@
+/* ============================================================================
+   IRIS-VE Design System — Glassmorphism Dark Theme
+   ============================================================================ */
+
+/* --------------------------------------------------------------------------
+   0. SF Pro Display — @font-face
+   -------------------------------------------------------------------------- */
+@font-face {
+    font-family: 'SF Pro Display';
+    src: url('/static/fonts/SFPRODISPLAYREGULAR.OTF') format('opentype');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'SF Pro Display';
+    src: url('/static/fonts/SFPRODISPLAYMEDIUM.OTF') format('opentype');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'SF Pro Display';
+    src: url('/static/fonts/SFPRODISPLAYBOLD.OTF') format('opentype');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'SF Pro Display';
+    src: url('/static/fonts/SFPRODISPLAYLIGHTITALIC.OTF') format('opentype');
+    font-weight: 300;
+    font-style: italic;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'SF Pro Display';
+    src: url('/static/fonts/SFPRODISPLAYSEMIBOLDITALIC.OTF') format('opentype');
+    font-weight: 600;
+    font-style: italic;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'SF Pro Display';
+    src: url('/static/fonts/SFPRODISPLAYHEAVYITALIC.OTF') format('opentype');
+    font-weight: 800;
+    font-style: italic;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'SF Pro Display';
+    src: url('/static/fonts/SFPRODISPLAYBLACKITALIC.OTF') format('opentype');
+    font-weight: 900;
+    font-style: italic;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'SF Pro Display';
+    src: url('/static/fonts/SFPRODISPLAYTHINITALIC.OTF') format('opentype');
+    font-weight: 100;
+    font-style: italic;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'SF Pro Display';
+    src: url('/static/fonts/SFPRODISPLAYULTRALIGHTITALIC.OTF') format('opentype');
+    font-weight: 200;
+    font-style: italic;
+    font-display: swap;
+}
+
+/* --------------------------------------------------------------------------
+   1. CSS Custom Properties (Design Tokens)
+   -------------------------------------------------------------------------- */
+:root {
+    /* Background */
+    --iris-bg-deep:        #0a0e1a;
+    --iris-bg-surface:     #0f1525;
+    --iris-bg-card:        rgba(255, 255, 255, 0.055);
+    --iris-bg-card-hover:  rgba(255, 255, 255, 0.09);
+    --iris-bg-input:       rgba(255, 255, 255, 0.07);
+    --iris-bg-modal:       rgba(10, 14, 26, 0.95);
+
+    /* Borders */
+    --iris-border:         rgba(255, 255, 255, 0.10);
+    --iris-border-focus:   rgba(99, 102, 241, 0.6);
+
+    /* Accent / Brand */
+    --iris-accent:         #6366f1;
+    --iris-accent-2:       #8b5cf6;
+    --iris-accent-3:       #a78bfa;
+    --iris-accent-grad:    linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    --iris-accent-glow:    0 0 30px rgba(99, 102, 241, 0.35);
+
+    /* State colors */
+    --iris-success:        #10b981;
+    --iris-danger:         #ef4444;
+    --iris-warning:        #f59e0b;
+    --iris-info:           #3b82f6;
+
+    /* Text */
+    --iris-text-primary:   #f1f5f9;
+    --iris-text-secondary: #94a3b8;
+    --iris-text-muted:     #64748b;
+
+    /* Effects */
+    --iris-blur:           blur(20px);
+    --iris-blur-sm:        blur(10px);
+    --iris-shadow:         0 8px 32px rgba(0, 0, 0, 0.5);
+    --iris-shadow-sm:      0 2px 12px rgba(0, 0, 0, 0.3);
+    --iris-shadow-lg:      0 20px 60px rgba(0, 0, 0, 0.6);
+
+    /* Radii */
+    --iris-radius-xs:      4px;
+    --iris-radius-sm:      8px;
+    --iris-radius-md:      12px;
+    --iris-radius-lg:      20px;
+    --iris-radius-xl:      28px;
+    --iris-radius-pill:    999px;
+
+    /* Spacing */
+    --iris-space-xs:       4px;
+    --iris-space-sm:       8px;
+    --iris-space-md:       16px;
+    --iris-space-lg:       24px;
+    --iris-space-xl:       40px;
+
+    /* Transitions */
+    --iris-ease:           cubic-bezier(0.4, 0, 0.2, 1);
+    --iris-ease-spring:    cubic-bezier(0.34, 1.56, 0.64, 1);
+    --iris-transition:     all 0.25s var(--iris-ease);
+
+    /* File type colors */
+    --iris-file-doc:       #3b82f6;
+    --iris-file-img:       #10b981;
+    --iris-file-video:     #8b5cf6;
+    --iris-file-audio:     #f59e0b;
+    --iris-file-archive:   #ef4444;
+    --iris-file-code:      #06b6d4;
+    --iris-file-default:   #94a3b8;
+}
+
+/* Light mode overrides */
+[data-theme="light"] {
+    --iris-bg-deep:        #eef2ff;
+    --iris-bg-surface:     #f8faff;
+    --iris-bg-card:        rgba(255, 255, 255, 0.80);
+    --iris-bg-card-hover:  rgba(255, 255, 255, 0.95);
+    --iris-bg-input:       rgba(255, 255, 255, 0.90);
+    --iris-bg-modal:       rgba(240, 244, 255, 0.97);
+    --iris-border:         rgba(99, 102, 241, 0.18);
+    --iris-border-focus:   rgba(99, 102, 241, 0.5);
+    --iris-text-primary:   #0f172a;
+    --iris-text-secondary: #475569;
+    --iris-text-muted:     #94a3b8;
+    --iris-shadow:         0 4px 20px rgba(99, 102, 241, 0.12);
+    --iris-shadow-lg:      0 16px 48px rgba(99, 102, 241, 0.18);
+}
+
+/* --------------------------------------------------------------------------
+   2. Base Reset & Body
+   -------------------------------------------------------------------------- */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 "Helvetica Neue", Arial, sans-serif;
+    background-color: var(--iris-bg-deep);
+    color: var(--iris-text-primary);
+    line-height: 1.6;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s var(--iris-ease), color 0.3s var(--iris-ease);
+}
+
+/* --------------------------------------------------------------------------
+   3. Animated Gradient Background
+   -------------------------------------------------------------------------- */
+.iris-bg-animated {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: var(--iris-bg-deep);
+    overflow: hidden;
+}
+
+.iris-bg-animated::before,
+.iris-bg-animated::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.25;
+    animation: iris-float 15s ease-in-out infinite alternate;
+}
+
+.iris-bg-animated::before {
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, #6366f1 0%, transparent 70%);
+    top: -200px;
+    left: -200px;
+    animation-duration: 18s;
+}
+
+.iris-bg-animated::after {
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, #8b5cf6 0%, transparent 70%);
+    bottom: -150px;
+    right: -150px;
+    animation-duration: 22s;
+    animation-direction: alternate-reverse;
+}
+
+@keyframes iris-float {
+    0%   { transform: translate(0, 0) scale(1); }
+    50%  { transform: translate(60px, 40px) scale(1.1); }
+    100% { transform: translate(-40px, 80px) scale(0.95); }
+}
+
+[data-theme="light"] .iris-bg-animated::before { opacity: 0.15; }
+[data-theme="light"] .iris-bg-animated::after  { opacity: 0.12; }
+
+/* --------------------------------------------------------------------------
+   4. Glass Card Component
+   -------------------------------------------------------------------------- */
+.glass-card {
+    background: var(--iris-bg-card);
+    backdrop-filter: var(--iris-blur);
+    -webkit-backdrop-filter: var(--iris-blur);
+    border: 1px solid var(--iris-border);
+    border-radius: var(--iris-radius-lg);
+    box-shadow: var(--iris-shadow);
+    transition: var(--iris-transition);
+}
+
+.glass-card:hover {
+    background: var(--iris-bg-card-hover);
+    border-color: rgba(99, 102, 241, 0.25);
+    transform: translateY(-3px);
+    box-shadow: 0 16px 48px rgba(99, 102, 241, 0.18), var(--iris-shadow);
+}
+
+.glass-card-flat {
+    background: var(--iris-bg-card);
+    backdrop-filter: var(--iris-blur-sm);
+    -webkit-backdrop-filter: var(--iris-blur-sm);
+    border: 1px solid var(--iris-border);
+    border-radius: var(--iris-radius-md);
+    box-shadow: var(--iris-shadow-sm);
+}
+
+/* --------------------------------------------------------------------------
+   5. Buttons
+   -------------------------------------------------------------------------- */
+.btn-iris {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--iris-radius-pill);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--iris-transition);
+    text-decoration: none;
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+}
+
+.btn-iris:focus-visible {
+    outline: 2px solid var(--iris-accent);
+    outline-offset: 2px;
+}
+
+.btn-iris-primary {
+    background: var(--iris-accent-grad);
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35);
+}
+.btn-iris-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5);
+    color: #fff;
+}
+.btn-iris-primary:active { transform: translateY(0); }
+
+.btn-iris-ghost {
+    background: var(--iris-bg-card);
+    color: var(--iris-text-primary);
+    border: 1px solid var(--iris-border);
+    backdrop-filter: var(--iris-blur-sm);
+}
+.btn-iris-ghost:hover {
+    background: var(--iris-bg-card-hover);
+    border-color: rgba(99, 102, 241, 0.3);
+    color: var(--iris-text-primary);
+}
+
+.btn-iris-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--iris-danger);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.btn-iris-danger:hover {
+    background: rgba(239, 68, 68, 0.25);
+    color: var(--iris-danger);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.btn-iris-icon {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border-radius: var(--iris-radius-md);
+    justify-content: center;
+    font-size: 1rem;
+}
+
+.btn-iris-sm {
+    padding: 6px 14px;
+    font-size: 0.8125rem;
+}
+
+/* --------------------------------------------------------------------------
+   6. Form Inputs
+   -------------------------------------------------------------------------- */
+.iris-input {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--iris-bg-input);
+    border: 1px solid var(--iris-border);
+    border-radius: var(--iris-radius-md);
+    color: var(--iris-text-primary);
+    font-size: 0.9375rem;
+    transition: var(--iris-transition);
+    backdrop-filter: var(--iris-blur-sm);
+    -webkit-backdrop-filter: var(--iris-blur-sm);
+}
+
+.iris-input::placeholder { color: var(--iris-text-muted); }
+.iris-input:focus {
+    outline: none;
+    border-color: var(--iris-border-focus);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    background: var(--iris-bg-card-hover);
+}
+
+.iris-input-group {
+    position: relative;
+    margin-bottom: 16px;
+}
+.iris-input-group label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--iris-text-secondary);
+    margin-bottom: 6px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+.iris-input-group .iris-input-icon {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--iris-text-muted);
+    pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   7. Badges & Pills
+   -------------------------------------------------------------------------- */
+.iris-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: var(--iris-radius-pill);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.iris-badge-accent {
+    background: rgba(99, 102, 241, 0.18);
+    color: var(--iris-accent-3);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+}
+.iris-badge-success {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--iris-success);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.iris-badge-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--iris-danger);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.iris-badge-warning {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--iris-warning);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+.iris-badge-neutral {
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--iris-text-secondary);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+/* --------------------------------------------------------------------------
+   8. Toast Notifications
+   -------------------------------------------------------------------------- */
+.iris-toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.iris-toast {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--iris-bg-card);
+    backdrop-filter: var(--iris-blur);
+    -webkit-backdrop-filter: var(--iris-blur);
+    border: 1px solid var(--iris-border);
+    border-radius: var(--iris-radius-md);
+    box-shadow: var(--iris-shadow-lg);
+    min-width: 280px;
+    max-width: 400px;
+    pointer-events: auto;
+    animation: iris-toast-in 0.4s var(--iris-ease-spring) forwards;
+}
+
+.iris-toast.removing {
+    animation: iris-toast-out 0.3s var(--iris-ease) forwards;
+}
+
+.iris-toast-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--iris-radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1rem;
+}
+
+.iris-toast-success .iris-toast-icon { background: rgba(16,185,129,0.15); color: var(--iris-success); }
+.iris-toast-error   .iris-toast-icon { background: rgba(239,68,68,0.15);  color: var(--iris-danger); }
+.iris-toast-info    .iris-toast-icon { background: rgba(59,130,246,0.15); color: var(--iris-info); }
+.iris-toast-warning .iris-toast-icon { background: rgba(245,158,11,0.15); color: var(--iris-warning); }
+
+.iris-toast-success { border-left: 3px solid var(--iris-success); }
+.iris-toast-error   { border-left: 3px solid var(--iris-danger); }
+.iris-toast-info    { border-left: 3px solid var(--iris-info); }
+.iris-toast-warning { border-left: 3px solid var(--iris-warning); }
+
+.iris-toast-body { flex: 1; }
+.iris-toast-title {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--iris-text-primary);
+}
+.iris-toast-msg {
+    font-size: 0.8125rem;
+    color: var(--iris-text-secondary);
+    margin-top: 2px;
+}
+
+.iris-toast-close {
+    background: none;
+    border: none;
+    color: var(--iris-text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--iris-radius-xs);
+    font-size: 1rem;
+    transition: color 0.2s;
+    flex-shrink: 0;
+}
+.iris-toast-close:hover { color: var(--iris-text-primary); }
+
+@keyframes iris-toast-in {
+    from { opacity: 0; transform: translateX(60px) scale(0.95); }
+    to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes iris-toast-out {
+    from { opacity: 1; transform: translateX(0) scale(1); }
+    to   { opacity: 0; transform: translateX(60px) scale(0.95); }
+}
+
+/* --------------------------------------------------------------------------
+   9. Skeleton Loading
+   -------------------------------------------------------------------------- */
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        rgba(255,255,255,0.05) 25%,
+        rgba(255,255,255,0.10) 50%,
+        rgba(255,255,255,0.05) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.6s infinite;
+    border-radius: var(--iris-radius-sm);
+}
+
+@keyframes skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+[data-theme="light"] .skeleton {
+    background: linear-gradient(
+        90deg,
+        rgba(0,0,0,0.04) 25%,
+        rgba(0,0,0,0.08) 50%,
+        rgba(0,0,0,0.04) 75%
+    );
+    background-size: 200% 100%;
+}
+
+/* --------------------------------------------------------------------------
+   10. Progress Bar
+   -------------------------------------------------------------------------- */
+.iris-progress {
+    width: 100%;
+    height: 6px;
+    background: rgba(255,255,255,0.08);
+    border-radius: var(--iris-radius-pill);
+    overflow: hidden;
+}
+.iris-progress-bar {
+    height: 100%;
+    background: var(--iris-accent-grad);
+    border-radius: var(--iris-radius-pill);
+    transition: width 0.3s var(--iris-ease);
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+}
+
+/* --------------------------------------------------------------------------
+   11. Navbar
+   -------------------------------------------------------------------------- */
+.iris-navbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 32px;
+    background: rgba(10, 14, 26, 0.75);
+    backdrop-filter: var(--iris-blur);
+    -webkit-backdrop-filter: var(--iris-blur);
+    border-bottom: 1px solid var(--iris-border);
+}
+
+[data-theme="light"] .iris-navbar {
+    background: rgba(238, 242, 255, 0.85);
+}
+
+.iris-navbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--iris-text-primary);
+    text-decoration: none;
+    letter-spacing: -0.02em;
+}
+
+.iris-navbar-brand .brand-icon {
+    width: 36px;
+    height: 36px;
+    background: var(--iris-accent-grad);
+    border-radius: var(--iris-radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    color: white;
+    box-shadow: var(--iris-accent-glow);
+}
+
+.iris-navbar-brand span { background: var(--iris-accent-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+.iris-navbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* --------------------------------------------------------------------------
+   12. Theme Toggle
+   -------------------------------------------------------------------------- */
+.iris-theme-toggle {
+    width: 42px;
+    height: 42px;
+    background: var(--iris-bg-card);
+    border: 1px solid var(--iris-border);
+    border-radius: var(--iris-radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--iris-text-secondary);
+    transition: var(--iris-transition);
+    font-size: 1.1rem;
+    backdrop-filter: var(--iris-blur-sm);
+}
+.iris-theme-toggle:hover {
+    color: var(--iris-text-primary);
+    border-color: rgba(99, 102, 241, 0.4);
+    background: var(--iris-bg-card-hover);
+}
+
+/* --------------------------------------------------------------------------
+   13. Modal
+   -------------------------------------------------------------------------- */
+.iris-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: iris-modal-overlay-in 0.2s var(--iris-ease);
+}
+
+.iris-modal {
+    background: var(--iris-bg-modal);
+    border: 1px solid var(--iris-border);
+    border-radius: var(--iris-radius-xl);
+    box-shadow: var(--iris-shadow-lg);
+    width: 100%;
+    max-width: 480px;
+    padding: 32px;
+    animation: iris-modal-in 0.3s var(--iris-ease-spring);
+}
+
+.iris-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.iris-modal-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--iris-text-primary);
+}
+
+.iris-modal-close {
+    width: 32px;
+    height: 32px;
+    background: var(--iris-bg-card);
+    border: 1px solid var(--iris-border);
+    border-radius: var(--iris-radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--iris-text-muted);
+    font-size: 1rem;
+    transition: var(--iris-transition);
+}
+.iris-modal-close:hover { color: var(--iris-text-primary); background: var(--iris-bg-card-hover); }
+
+@keyframes iris-modal-overlay-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@keyframes iris-modal-in {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* --------------------------------------------------------------------------
+   14. File Type Indicators
+   -------------------------------------------------------------------------- */
+.file-type-dot {
+    width: 4px;
+    height: 100%;
+    border-radius: 4px 0 0 4px;
+    flex-shrink: 0;
+}
+.file-type-doc    { background: var(--iris-file-doc); }
+.file-type-img    { background: var(--iris-file-img); }
+.file-type-video  { background: var(--iris-file-video); }
+.file-type-audio  { background: var(--iris-file-audio); }
+.file-type-archive { background: var(--iris-file-archive); }
+.file-type-code   { background: var(--iris-file-code); }
+.file-type-default { background: var(--iris-file-default); }
+
+/* Icon color matching */
+.file-icon-doc    { color: var(--iris-file-doc) !important; }
+.file-icon-img    { color: var(--iris-file-img) !important; }
+.file-icon-video  { color: var(--iris-file-video) !important; }
+.file-icon-audio  { color: var(--iris-file-audio) !important; }
+.file-icon-archive { color: var(--iris-file-archive) !important; }
+.file-icon-code   { color: var(--iris-file-code) !important; }
+
+/* --------------------------------------------------------------------------
+   15. Drag-and-Drop Upload Zone
+   -------------------------------------------------------------------------- */
+.iris-upload-zone {
+    border: 2px dashed var(--iris-border);
+    border-radius: var(--iris-radius-lg);
+    padding: 40px 24px;
+    text-align: center;
+    transition: var(--iris-transition);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    background: var(--iris-bg-card);
+}
+
+.iris-upload-zone::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: var(--iris-accent-grad);
+    border-radius: var(--iris-radius-lg);
+    opacity: 0;
+    transition: opacity 0.3s var(--iris-ease);
+    z-index: -1;
+}
+
+.iris-upload-zone::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--iris-bg-card);
+    border-radius: calc(var(--iris-radius-lg) - 2px);
+    z-index: -1;
+}
+
+.iris-upload-zone:hover,
+.iris-upload-zone.drag-over {
+    border-color: var(--iris-accent);
+    background: rgba(99, 102, 241, 0.06);
+}
+
+.iris-upload-zone.drag-over::before { opacity: 0.5; }
+
+.iris-upload-icon {
+    width: 60px;
+    height: 60px;
+    background: rgba(99, 102, 241, 0.12);
+    border-radius: var(--iris-radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    color: var(--iris-accent);
+    margin: 0 auto 16px;
+    transition: var(--iris-transition);
+}
+.iris-upload-zone:hover .iris-upload-icon {
+    background: rgba(99, 102, 241, 0.2);
+    transform: scale(1.05);
+}
+
+/* --------------------------------------------------------------------------
+   16. Scrollbar
+   -------------------------------------------------------------------------- */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.12);
+    border-radius: var(--iris-radius-pill);
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
+
+/* --------------------------------------------------------------------------
+   17. Utility Classes
+   -------------------------------------------------------------------------- */
+.iris-gradient-text {
+    background: var(--iris-accent-grad);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.iris-divider {
+    height: 1px;
+    background: var(--iris-border);
+    margin: 20px 0;
+}
+
+.iris-empty-state {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.iris-empty-icon {
+    width: 80px;
+    height: 80px;
+    background: rgba(99, 102, 241, 0.08);
+    border-radius: var(--iris-radius-xl);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: var(--iris-accent);
+    margin: 0 auto 20px;
+}
+
+.iris-stat-card {
+    padding: 16px;
+    border-radius: var(--iris-radius-md);
+    background: var(--iris-bg-card);
+    border: 1px solid var(--iris-border);
+    transition: var(--iris-transition);
+}
+
+.iris-stat-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--iris-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+}
+
+.iris-stat-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--iris-text-primary);
+    letter-spacing: -0.03em;
+}
+
+.iris-stat-sub {
+    font-size: 0.75rem;
+    color: var(--iris-text-muted);
+    margin-top: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   18. Animations
+   -------------------------------------------------------------------------- */
+@keyframes iris-fade-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes iris-pulse-ring {
+    0%   { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(99,102,241,0.5); }
+    70%  { transform: scale(1);    box-shadow: 0 0 0 10px rgba(99,102,241,0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+}
+
+.iris-animate-in { animation: iris-fade-in 0.4s var(--iris-ease) forwards; }
+
+/* Staggered children animation */
+.iris-stagger > * {
+    opacity: 0;
+    animation: iris-fade-in 0.4s var(--iris-ease) forwards;
+}
+.iris-stagger > *:nth-child(1)  { animation-delay: 0.05s; }
+.iris-stagger > *:nth-child(2)  { animation-delay: 0.10s; }
+.iris-stagger > *:nth-child(3)  { animation-delay: 0.15s; }
+.iris-stagger > *:nth-child(4)  { animation-delay: 0.20s; }
+.iris-stagger > *:nth-child(5)  { animation-delay: 0.25s; }
+.iris-stagger > *:nth-child(6)  { animation-delay: 0.30s; }
+.iris-stagger > *:nth-child(7)  { animation-delay: 0.35s; }
+.iris-stagger > *:nth-child(8)  { animation-delay: 0.40s; }
+
+/* --------------------------------------------------------------------------
+   19. Responsive
+   -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+    .iris-navbar { padding: 12px 16px; }
+    .iris-modal  { padding: 24px 20px; }
+    .iris-toast-container { bottom: 16px; right: 16px; left: 16px; }
+    .iris-toast  { min-width: unset; }
+}
+
+/* --------------------------------------------------------------------------
+   20. Checkbox / Toggle
+   -------------------------------------------------------------------------- */
+.iris-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.iris-toggle input { display: none; }
+
+.iris-toggle-track {
+    width: 44px;
+    height: 24px;
+    background: rgba(255,255,255,0.12);
+    border-radius: var(--iris-radius-pill);
+    border: 1px solid var(--iris-border);
+    transition: var(--iris-transition);
+    position: relative;
+}
+
+.iris-toggle-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    transition: var(--iris-transition);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+.iris-toggle input:checked ~ .iris-toggle-track {
+    background: var(--iris-accent-grad);
+    border-color: var(--iris-accent);
+}
+
+.iris-toggle input:checked ~ .iris-toggle-track .iris-toggle-thumb {
+    transform: translateX(20px);
+}
+
+.iris-toggle-label {
+    font-size: 0.875rem;
+    color: var(--iris-text-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   21. Performance Hints
+   -------------------------------------------------------------------------- */
+/* Promote animated elements to their own GPU layer */
+.iris-bg-animated::before,
+.iris-bg-animated::after {
+    will-change: transform;
+}
+
+.glass-card,
+.btn-iris {
+    will-change: transform;
+}
+
+/* Prevent layout shift during modal open */
+.iris-modal-overlay {
+    overscroll-behavior: contain;
+}
+
+/* Long text overflow protection in toasts */
+.iris-toast-title,
+.iris-toast-msg {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+/* Ensure skeleton animations don't block interaction */
+.skeleton {
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Focus ring for keyboard accessibility */
+.folder-card:focus-visible,
+.file-row:focus-visible {
+    outline: 2px solid var(--iris-accent);
+    outline-offset: 2px;
+}
+
+/* Smooth disk progress bar color based on usage */
+.iris-progress-bar.warning { background: linear-gradient(90deg, var(--iris-warning), #f97316); }
+.iris-progress-bar.danger  { background: linear-gradient(90deg, var(--iris-danger), #dc2626); }

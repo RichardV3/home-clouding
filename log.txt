@@ -1,10 +1,16 @@
 "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Scripts\python.exe" "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\app.py"
 C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-packages\flask_limiter\extension.py:336: UserWarning: Using the in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about configuring the storage backend.
   warnings.warn(
-[I 2026-03-24 16:13:02] concurrency model: async
-[I 2026-03-24 16:13:02] masquerade (NAT) address: None
-[I 2026-03-24 16:13:02] passive ports: 60000->60100
-[I 2026-03-24 16:13:02] >>> starting FTP server on 0.0.0.0:2121, pid=24880 <<<
+[I 2026-03-24 16:44:11] concurrency model: async
+[I 2026-03-24 16:44:11] masquerade (NAT) address: None
+[I 2026-03-24 16:44:11] passive ports: 60000->60100
+[I 2026-03-24 16:44:11] >>> starting FTP server on 0.0.0.0:2121, pid=15296 <<<
+Werkzeug appears to be used in a production deployment. Consider switching to a production web server instead.
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.137:5000
+Press CTRL+C to quit
 ════════════════════════════════════════════════════════════════════════════════
 🚀 IRIS-VE v2.0 STARTUP
 ════════════════════════════════════════════════════════════════════════════════
@@ -28,11 +34,37 @@ C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-package
 
 ✅ Server pronto!
 ════════════════════════════════════════════════════════════════════════════════
+ * Serving Flask app 'app'
+ * Debug mode: off
+C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\app.py:2101: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  user = User.query.get(user_id)
+message handler error
 Traceback (most recent call last):
-  File "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\app.py", line 2343, in <module>
-    socketio.run(
-  File "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-packages\flask_socketio\__init__.py", line 664, in run
-    raise RuntimeError('The Werkzeug web server is not '
-RuntimeError: The Werkzeug web server is not designed to run in production. Pass allow_unsafe_werkzeug=True to the run() method to disable this error.
+  File "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-packages\flask_socketio\__init__.py", line 854, in _handle_event
+    ret = handler(auth)
+          ^^^^^^^^^^^^^
+TypeError: handle_ws_connect() takes 0 positional arguments but 1 was given
 
-Process finished with exit code 1
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-packages\engineio\server.py", line 451, in run_handler
+    return self.handlers[event](*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-packages\socketio\server.py", line 656, in _handle_eio_message
+    self._handle_connect(eio_sid, pkt.namespace, pkt.data)
+  File "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-packages\socketio\server.py", line 539, in _handle_connect
+    success = self._trigger_event(
+              ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-packages\socketio\server.py", line 621, in _trigger_event
+    return handler(*args)
+           ^^^^^^^^^^^^^^
+  File "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-packages\flask_socketio\__init__.py", line 306, in _handler
+    return self._handle_event(handler, message, real_ns, sid,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-packages\flask_socketio\__init__.py", line 856, in _handle_event
+    ret = handler()
+          ^^^^^^^^^
+  File "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\app.py", line 2104, in handle_ws_connect
+    from flask_socketio import request as sio_req
+ImportError: cannot import name 'request' from 'flask_socketio' (C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-packages\flask_socketio\__init__.py)

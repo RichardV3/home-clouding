@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrazione — IRIS-VE</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%236366f1'/><text x='50%25' y='55%25' font-size='18' text-anchor='middle' dominant-baseline='middle' fill='white'>I</text></svg>">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='iris-ve.css') }}">
+
+    <style>
+        .hero-section {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 100px 20px 60px;
+            position: relative;
+        }
+
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            pointer-events: none;
+            z-index: -1;
+        }
+        .orb-1 {
+            width: 500px; height: 500px;
+            background: radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%);
+            top: -150px; left: -100px;
+            animation: orb-drift-1 20s ease-in-out infinite alternate;
+        }
+        .orb-2 {
+            width: 400px; height: 400px;
+            background: radial-gradient(circle, rgba(139,92,246,0.25) 0%, transparent 70%);
+            bottom: -100px; right: -50px;
+            animation: orb-drift-2 25s ease-in-out infinite alternate;
+        }
+        .orb-3 {
+            width: 300px; height: 300px;
+            background: radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 70%);
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            animation: orb-drift-3 30s ease-in-out infinite alternate;
+        }
+
+        @keyframes orb-drift-1 {
+            0%   { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(80px, 120px) scale(1.2); }
+        }
+        @keyframes orb-drift-2 {
+            0%   { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(-60px, -80px) scale(1.1); }
+        }
+        @keyframes orb-drift-3 {
+            0%   { transform: translate(-50%, -50%) scale(1); }
+            100% { transform: translate(-45%, -55%) scale(1.3); }
+        }
+
+        .reg-card {
+            width: 100%;
+            max-width: 520px;
+            padding: 40px;
+            border-radius: 24px;
+            animation: iris-fade-in 0.6s 0.1s var(--iris-ease) both;
+        }
+
+        .reg-card-header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .reg-icon {
+            width: 64px; height: 64px;
+            background: var(--iris-accent-grad);
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.75rem;
+            color: white;
+            margin: 0 auto 16px;
+            box-shadow: 0 8px 24px rgba(99,102,241,0.4);
+        }
+
+        .reg-title {
+            font-size: 1.375rem;
+            font-weight: 800;
+            color: var(--iris-text-primary);
+            letter-spacing: -0.02em;
+        }
+        .reg-subtitle {
+            font-size: 0.875rem;
+            color: var(--iris-text-muted);
+            margin-top: 4px;
+        }
+
+        /* Steps */
+        .steps-bar {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            margin-bottom: 28px;
+        }
+        .step-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            position: relative;
+        }
+        .step-item:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            top: 14px;
+            left: calc(50% + 14px);
+            right: calc(-50% + 14px);
+            height: 2px;
+            background: var(--iris-border);
+            z-index: 0;
+            transition: background 0.3s;
+        }
+        .step-item.completed:not(:last-child)::after {
+            background: var(--iris-accent);
+        }
+
+        .step-circle {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+            border: 2px solid var(--iris-border);
+            background: var(--iris-surface);
+            color: var(--iris-text-muted);
+            transition: all 0.3s;
+            z-index: 1;
+        }
+        .step-item.active .step-circle {
+            background: var(--iris-accent);
+            border-color: var(--iris-accent);
+            color: white;
+            box-shadow: 0 0 0 4px rgba(99,102,241,0.2);
+        }
+        .step-item.completed .step-circle {
+            background: var(--iris-success);
+            border-color: var(--iris-success);
+            color: white;
+        }
+        .step-label {
+            font-size: 0.6875rem;
+            font-weight: 600;
+            color: var(--iris-text-muted);
+            margin-top: 6px;
+            text-align: center;
+            letter-spacing: 0.02em;
+        }
+        .step-item.active .step-label {
+            color: var(--iris-accent);
+        }
+        .step-item.completed .step-label {
+            color: var(--iris-success);
+        }
+
+        /* Form steps */
+        .form-step { display: none; }
+        .form-step.active { display: block; animation: iris-fade-in 0.3s var(--iris-ease); }
+
+        .input-wrapper {
+            position: relative;
+            margin-bottom: 16px;
+        }
+        .input-wrapper label {
+            display: block;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--iris-text-secondary);
+            margin-bottom: 6px;
+            letter-spacing: 0.02em;
+        }
+        .input-wrapper .input-icon {
+            position: absolute;
+            left: 14px;
+            bottom: 13px;
+            color: var(--iris-text-muted);
+            pointer-events: none;
+            font-size: 1rem;
+        }
+        .input-with-icon { padding-left: 42px !important; }
+
+        /* Choice cards */
+        .choice-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .choice-card {
+            padding: 18px 16px;
+            border-radius: var(--iris-radius-md);
+            border: 2px solid var(--iris-border);
+            background: var(--iris-surface);
+            cursor: pointer;
+            transition: all 0.2s var(--iris-ease);
+            text-align: center;
+            user-select: none;
+        }
+        .choice-card:hover {
+            border-color: rgba(99,102,241,0.5);
+            background: rgba(99,102,241,0.06);
+        }
+        .choice-card.selected {
+            border-color: var(--iris-accent);
+            background: rgba(99,102,241,0.12);
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+        }
+        .choice-card-icon {
+            font-size: 1.6rem;
+            margin-bottom: 8px;
+        }
+        .choice-card-title {
+            font-size: 0.9375rem;
+            font-weight: 700;
+            color: var(--iris-text-primary);
+        }
+        .choice-card-desc {
+            font-size: 0.75rem;
+            color: var(--iris-text-muted);
+            margin-top: 4px;
+        }
+
+        /* Org code display */
+        .code-badge {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+            background: rgba(16,185,129,0.08);
+            border: 1px solid rgba(16,185,129,0.25);
+            border-radius: var(--iris-radius-md);
+            margin-top: 4px;
+        }
+        .code-badge-text {
+            font-size: 1.5rem;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            color: var(--iris-success);
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+        .code-badge-label {
+            font-size: 0.75rem;
+            color: var(--iris-text-muted);
+            margin-top: 2px;
+        }
+
+        .btn-reg {
+            width: 100%;
+            padding: 14px;
+            background: var(--iris-accent-grad);
+            color: white;
+            border: none;
+            border-radius: var(--iris-radius-md);
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: var(--iris-transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 24px;
+            box-shadow: 0 4px 15px rgba(99,102,241,0.35);
+        }
+        .btn-reg:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(99,102,241,0.5);
+        }
+        .btn-reg:active { transform: translateY(0); }
+
+        .btn-back {
+            width: 100%;
+            padding: 12px;
+            background: transparent;
+            color: var(--iris-text-secondary);
+            border: 1px solid var(--iris-border);
+            border-radius: var(--iris-radius-md);
+            font-size: 0.9375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--iris-transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .btn-back:hover {
+            background: rgba(99,102,241,0.06);
+            border-color: rgba(99,102,241,0.4);
+            color: var(--iris-accent);
+        }
+
+        .login-link {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.875rem;
+            color: var(--iris-text-muted);
+        }
+        .login-link a {
+            color: var(--iris-accent);
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .login-link a:hover { text-decoration: underline; }
+
+        .error-box {
+            padding: 12px 16px;
+            background: rgba(239,68,68,0.1);
+            border: 1px solid rgba(239,68,68,0.25);
+            border-radius: var(--iris-radius-md);
+            color: var(--iris-danger);
+            font-size: 0.875rem;
+            margin-bottom: 20px;
+        }
+        .error-box ul { margin: 0; padding-left: 18px; }
+        .error-box li { margin-top: 2px; }
+
+        .section-divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 20px 0 16px;
+            color: var(--iris-text-muted);
+            font-size: 0.8125rem;
+            font-weight: 600;
+        }
+        .section-divider::before, .section-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--iris-border);
+        }
+
+        .info-box {
+            padding: 12px 16px;
+            background: rgba(99,102,241,0.08);
+            border: 1px solid rgba(99,102,241,0.2);
+            border-radius: var(--iris-radius-md);
+            color: var(--iris-text-secondary);
+            font-size: 0.8125rem;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+        .info-box i { color: var(--iris-accent); }
+
+        /* ===== FIELD VALIDATION ===== */
+        .iris-input.is-valid {
+            border-color: var(--iris-success) !important;
+        }
+        .iris-input.is-invalid {
+            border-color: var(--iris-danger) !important;
+        }
+        .field-feedback {
+            font-size: 0.75rem;
+            margin-top: 4px;
+            display: none;
+            animation: iris-fade-in 0.2s var(--iris-ease);
+        }
+        .field-feedback.valid { color: var(--iris-success); display: block; }
+        .field-feedback.invalid { color: var(--iris-danger); display: block; }
+
+        /* ===== INVITE CODE STATE ===== */
+        .code-lookup-state {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8125rem;
+            margin-top: 8px;
+            padding: 8px 12px;
+            border-radius: var(--iris-radius-md);
+            animation: iris-fade-in 0.2s var(--iris-ease);
+        }
+        .code-lookup-state.loading {
+            display: flex;
+            background: rgba(99,102,241,0.08);
+            color: var(--iris-text-muted);
+        }
+        .code-lookup-state.error {
+            display: flex;
+            background: rgba(239,68,68,0.08);
+            border: 1px solid rgba(239,68,68,0.2);
+            color: var(--iris-danger);
+        }
+
+        /* ===== ORG PREVIEW CARD ===== */
+        .org-preview-card {
+            display: none;
+            background: rgba(16,185,129,0.07);
+            border: 1px solid rgba(16,185,129,0.25);
+            border-radius: var(--iris-radius-md);
+            padding: 16px;
+            margin-top: 12px;
+            animation: iris-fade-in 0.3s var(--iris-ease);
+        }
+        .org-preview-card.visible { display: block; }
+        .org-preview-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .org-preview-icon {
+            width: 38px; height: 38px;
+            border-radius: 10px;
+            background: rgba(16,185,129,0.15);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--iris-success);
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        .org-preview-name {
+            font-size: 1rem;
+            font-weight: 800;
+            color: var(--iris-text-primary);
+            letter-spacing: -0.02em;
+        }
+        .org-preview-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.6875rem;
+            font-weight: 700;
+            color: var(--iris-success);
+            background: rgba(16,185,129,0.12);
+            padding: 2px 8px;
+            border-radius: 999px;
+            margin-top: 2px;
+        }
+        .org-preview-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            font-size: 0.8125rem;
+            color: var(--iris-text-secondary);
+            padding: 4px 0;
+        }
+        .org-preview-row i {
+            color: var(--iris-text-muted);
+            width: 14px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        /* ===== TOASTER ===== */
+        .reg-toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+        .reg-toast {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 16px;
+            border-radius: 14px;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--iris-border);
+            min-width: 260px;
+            max-width: 340px;
+            pointer-events: all;
+            animation: toast-in 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        @keyframes toast-in {
+            from { transform: translateX(120%); opacity: 0; }
+            to   { transform: translateX(0);    opacity: 1; }
+        }
+        .reg-toast.removing {
+            animation: toast-out 0.25s ease forwards;
+        }
+        @keyframes toast-out {
+            to { transform: translateX(120%); opacity: 0; }
+        }
+        .reg-toast-success { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); }
+        .reg-toast-error   { background: rgba(239,68,68,0.15);  border-color: rgba(239,68,68,0.3); }
+        .reg-toast-warning { background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.3); }
+        .reg-toast-info    { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.3); }
+        .reg-toast-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+        .reg-toast-success .reg-toast-icon { color: var(--iris-success); }
+        .reg-toast-error   .reg-toast-icon { color: var(--iris-danger); }
+        .reg-toast-warning .reg-toast-icon { color: var(--iris-warning); }
+        .reg-toast-info    .reg-toast-icon { color: var(--iris-accent); }
+        .reg-toast-body { flex: 1; min-width: 0; }
+        .reg-toast-title { font-size: 0.875rem; font-weight: 700; color: var(--iris-text-primary); }
+        .reg-toast-msg   { font-size: 0.8rem; color: var(--iris-text-secondary); margin-top: 2px; }
+
+        @media (max-width: 576px) {
+            .reg-card { padding: 28px 20px; }
+            .choice-grid { grid-template-columns: 1fr; }
+            .reg-toast-container { bottom: 12px; right: 12px; left: 12px; }
+            .reg-toast { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <!-- NAVBAR -->
+    <nav class="iris-navbar">
+        <a class="iris-navbar-brand" href="/">
+            <div class="brand-icon"><i class="bi bi-shield-lock-fill"></i></div>
+            IRIS<span>-VE</span>
+        </a>
+        <div class="iris-navbar-actions">
+            <button class="iris-theme-toggle" onclick="toggleTheme()" title="Cambia tema">
+                <i class="bi bi-moon-stars-fill" id="theme-icon"></i>
+            </button>
+        </div>
+    </nav>
+
+    <section class="hero-section">
+
+        <div class="reg-card glass-card">
+            <div class="reg-card-header">
+                <div class="reg-icon">
+                    <i class="bi bi-person-plus-fill"></i>
+                </div>
+                <div class="reg-title">Crea il tuo account</div>
+                <div class="reg-subtitle">Unisciti a IRIS-VE — cloud storage sicuro</div>
+            </div>
+
+            {% if errors %}
+            <div class="error-box">
+                {% if errors|length == 1 %}
+                <i class="bi bi-exclamation-circle-fill me-1"></i>{{ errors[0] }}
+                {% else %}
+                <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Steps bar -->
+            <div class="steps-bar" id="stepsBar">
+                <div class="step-item active" id="stepItem1">
+                    <div class="step-circle">1</div>
+                    <div class="step-label">Account</div>
+                </div>
+                <div class="step-item" id="stepItem2">
+                    <div class="step-circle">2</div>
+                    <div class="step-label">Organizzazione</div>
+                </div>
+                <div class="step-item" id="stepItem3">
+                    <div class="step-circle">3</div>
+                    <div class="step-label">Conferma</div>
+                </div>
+            </div>
+
+            <form method="POST" action="/register" id="regForm">
+
+                <!-- ===== STEP 1: Account ===== -->
+                <div class="form-step active" id="step1">
+                    <div class="input-wrapper">
+                        <label for="username">Username</label>
+                        <i class="bi bi-person input-icon"></i>
+                        <input type="text" id="username" name="username"
+                               class="iris-input input-with-icon"
+                               placeholder="il_tuo_username"
+                               value="{{ form_data.username if form_data else '' }}"
+                               autocomplete="username" minlength="3" maxlength="80"
+                               onblur="validateUsername(this)">
+                        <div class="field-feedback" id="fb-username"></div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label for="email">Email</label>
+                        <i class="bi bi-envelope input-icon"></i>
+                        <input type="email" id="email" name="email"
+                               class="iris-input input-with-icon"
+                               placeholder="email@dominio.com"
+                               value="{{ form_data.email if form_data else '' }}"
+                               autocomplete="email"
+                               onblur="validateEmail(this)">
+                        <div class="field-feedback" id="fb-email"></div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label for="password">Password</label>
+                        <i class="bi bi-lock input-icon"></i>
+                        <input type="password" id="password" name="password"
+                               class="iris-input input-with-icon"
+                               placeholder="Almeno 8 caratteri"
+                               autocomplete="new-password" minlength="8"
+                               oninput="validatePasswordStrength(this)">
+                        <div class="field-feedback" id="fb-password"></div>
+                    </div>
+
+                    <div class="input-wrapper">
+                        <label for="confirm_password">Conferma Password</label>
+                        <i class="bi bi-lock-fill input-icon"></i>
+                        <input type="password" id="confirm_password" name="confirm_password"
+                               class="iris-input input-with-icon"
+                               placeholder="Ripeti la password"
+                               autocomplete="new-password"
+                               oninput="validateConfirm(this)">
+                        <div class="field-feedback" id="fb-confirm"></div>
+                    </div>
+
+                    <button type="button" class="btn-reg" onclick="goToStep2()">
+                        <i class="bi bi-arrow-right"></i>
+                        Continua
+                    </button>
+                </div>
+
+                <!-- ===== STEP 2: Organizzazione ===== -->
+                <div class="form-step" id="step2">
+
+                    <!-- Sub-step 2a: appartieni a un'org? -->
+                    <div id="sub2a">
+                        <p style="font-size:0.9375rem;color:var(--iris-text-secondary);margin-bottom:16px;">
+                            Fai parte di un'organizzazione o azienda?
+                        </p>
+                        <div class="choice-grid">
+                            <div class="choice-card" id="cardYes" onclick="selectOrg('yes')">
+                                <div class="choice-card-icon">🏢</div>
+                                <div class="choice-card-title">Sì</div>
+                                <div class="choice-card-desc">Appartiengo a un'organizzazione</div>
+                            </div>
+                            <div class="choice-card" id="cardNo" onclick="selectOrg('no')">
+                                <div class="choice-card-icon">👤</div>
+                                <div class="choice-card-title">No</div>
+                                <div class="choice-card-desc">Account personale</div>
+                            </div>
+                        </div>
+                        <input type="hidden" name="has_org" id="hasOrgInput" value="">
+                    </div>
+
+                    <!-- Sub-step 2b: org esiste già? -->
+                    <div id="sub2b" style="display:none;">
+                        <div class="section-divider">Organizzazione</div>
+                        <div class="choice-grid">
+                            <div class="choice-card" id="cardExists" onclick="selectOrgExists('yes')">
+                                <div class="choice-card-icon">🔑</div>
+                                <div class="choice-card-title">Già esistente</div>
+                                <div class="choice-card-desc">Ho un codice di invito</div>
+                            </div>
+                            <div class="choice-card" id="cardNew" onclick="selectOrgExists('no')">
+                                <div class="choice-card-icon">✨</div>
+                                <div class="choice-card-title">Nuova azienda</div>
+                                <div class="choice-card-desc">Voglio crearla io</div>
+                            </div>
+                        </div>
+                        <input type="hidden" name="org_exists" id="orgExistsInput" value="">
+                    </div>
+
+                    <!-- Sub-step 2c-A: join existing org -->
+                    <div id="sub2cJoin" style="display:none;">
+                        <div class="info-box">
+                            <i class="bi bi-info-circle-fill"></i>
+                            Inserisci il codice a 6 cifre che il fondatore dell'organizzazione ti ha fornito.
+                        </div>
+                        <div class="input-wrapper">
+                            <label for="invite_code">Codice Organizzazione</label>
+                            <i class="bi bi-upc-scan input-icon"></i>
+                            <input type="text" id="invite_code" name="invite_code"
+                                   class="iris-input input-with-icon"
+                                   placeholder="ABC123"
+                                   maxlength="6" style="text-transform:uppercase;letter-spacing:0.15em;font-weight:700;font-size:1.1rem;"
+                                   value="{{ form_data.invite_code if form_data else '' }}"
+                                   oninput="onInviteCodeInput(this)">
+                        </div>
+
+                        <!-- Stato lookup codice -->
+                        <div class="code-lookup-state loading" id="codeLookupLoading">
+                            <span class="spinner-border spinner-border-sm"></span>
+                            <span>Ricerca organizzazione…</span>
+                        </div>
+                        <div class="code-lookup-state error" id="codeLookupError">
+                            <i class="bi bi-x-circle-fill"></i>
+                            <span id="codeLookupErrorMsg">Organizzazione non trovata</span>
+                        </div>
+
+                        <!-- Preview organizzazione trovata -->
+                        <div class="org-preview-card" id="orgPreviewCard">
+                            <div class="org-preview-header">
+                                <div class="org-preview-icon"><i class="bi bi-building-fill"></i></div>
+                                <div>
+                                    <div class="org-preview-name" id="orgPreviewName">—</div>
+                                    <div class="org-preview-badge">
+                                        <i class="bi bi-check-circle-fill"></i>
+                                        Organizzazione verificata
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="orgPreviewDetails"></div>
+                        </div>
+
+                        <button type="button" class="btn-reg" id="btnContinueJoin" onclick="goToStep3()" disabled style="opacity:0.5;cursor:not-allowed;">
+                            <i class="bi bi-arrow-right"></i>
+                            Unisciti e continua
+                        </button>
+                        <button type="button" class="btn-back" onclick="backToSub2b()">
+                            <i class="bi bi-arrow-left"></i> Indietro
+                        </button>
+                    </div>
+
+                    <!-- Sub-step 2c-B: create new org -->
+                    <div id="sub2cNew" style="display:none;">
+                        <div class="input-wrapper">
+                            <label for="org_name">Nome Azienda</label>
+                            <i class="bi bi-building input-icon"></i>
+                            <input type="text" id="org_name" name="org_name"
+                                   class="iris-input input-with-icon"
+                                   placeholder="Acme S.r.l."
+                                   value="{{ form_data.org_name if form_data else '' }}"
+                                   maxlength="255">
+                        </div>
+                        <div class="input-wrapper">
+                            <label for="org_address">Indirizzo <span style="color:var(--iris-text-muted);font-weight:400;">(opzionale)</span></label>
+                            <i class="bi bi-geo-alt input-icon"></i>
+                            <input type="text" id="org_address" name="org_address"
+                                   class="iris-input input-with-icon"
+                                   placeholder="Via Roma 1, 20100 Milano"
+                                   value="{{ form_data.org_address if form_data else '' }}"
+                                   maxlength="500">
+                        </div>
+                        <div class="input-wrapper">
+                            <label for="org_phone">Telefono <span style="color:var(--iris-text-muted);font-weight:400;">(opzionale)</span></label>
+                            <i class="bi bi-telephone input-icon"></i>
+                            <input type="tel" id="org_phone" name="org_phone"
+                                   class="iris-input input-with-icon"
+                                   placeholder="+39 02 1234567"
+                                   value="{{ form_data.org_phone if form_data else '' }}"
+                                   maxlength="20">
+                        </div>
+                        <button type="button" class="btn-reg" onclick="goToStep3()">
+                            <i class="bi bi-arrow-right"></i>
+                            Continua
+                        </button>
+                        <button type="button" class="btn-back" onclick="backToSub2b()">
+                            <i class="bi bi-arrow-left"></i> Indietro
+                        </button>
+                    </div>
+
+                    <!-- Back button for sub2a -->
+                    <div id="sub2aBack" style="display:none;">
+                        <button type="button" class="btn-back" onclick="goToStep1()">
+                            <i class="bi bi-arrow-left"></i> Indietro
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ===== STEP 3: Riepilogo e Submit ===== -->
+                <div class="form-step" id="step3">
+                    <div class="info-box" id="summaryBox">
+                        <i class="bi bi-check-circle-fill"></i>
+                        <span id="summaryText">Tutto pronto!</span>
+                    </div>
+
+                    <div id="summaryDetails" style="margin-bottom:16px;"></div>
+
+                    <button type="submit" class="btn-reg" id="submitBtn">
+                        <i class="bi bi-person-check-fill"></i>
+                        Crea Account
+                    </button>
+                    <button type="button" class="btn-back" onclick="backToStep2()">
+                        <i class="bi bi-arrow-left"></i> Indietro
+                    </button>
+                </div>
+
+            </form>
+
+            <div class="login-link">
+                Hai già un account? <a href="/">Accedi</a>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- Toast container -->
+    <div class="reg-toast-container" id="regToastContainer"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    // ===========================
+    // THEME
+    // ===========================
+    function toggleTheme() {
+        const html = document.documentElement;
+        const icon = document.getElementById('theme-icon');
+        const isDark = html.getAttribute('data-theme') === 'dark';
+        html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+        icon.className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+        localStorage.setItem('iris-theme', isDark ? 'light' : 'dark');
+    }
+    (function() {
+        const saved = localStorage.getItem('iris-theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', saved);
+        const icon = document.getElementById('theme-icon');
+        if (icon) icon.className = saved === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+    })();
+
+    // ===========================
+    // TOASTER
+    // ===========================
+    function showToast(type, title, msg, duration = 4000) {
+        const icons = { success: 'bi-check-circle-fill', error: 'bi-x-circle-fill',
+                        warning: 'bi-exclamation-triangle-fill', info: 'bi-info-circle-fill' };
+        const t = document.createElement('div');
+        t.className = `reg-toast reg-toast-${type}`;
+        t.innerHTML = `<div class="reg-toast-icon"><i class="bi ${icons[type] || 'bi-bell-fill'}"></i></div>
+            <div class="reg-toast-body">
+                <div class="reg-toast-title">${escHtml(title)}</div>
+                ${msg ? `<div class="reg-toast-msg">${escHtml(msg)}</div>` : ''}
+            </div>`;
+        document.getElementById('regToastContainer').appendChild(t);
+        setTimeout(() => {
+            t.classList.add('removing');
+            setTimeout(() => t.remove(), 280);
+        }, duration);
+    }
+
+    function escHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ===========================
+    // FIELD VALIDATION HELPERS
+    // ===========================
+    function setFieldState(input, fbId, state, msg) {
+        // state: 'valid' | 'invalid' | 'reset'
+        input.classList.remove('is-valid', 'is-invalid');
+        const fb = document.getElementById(fbId);
+        fb.className = 'field-feedback';
+        if (state === 'valid') {
+            input.classList.add('is-valid');
+            fb.className = 'field-feedback valid';
+            fb.textContent = msg || '';
+        } else if (state === 'invalid') {
+            input.classList.add('is-invalid');
+            fb.className = 'field-feedback invalid';
+            fb.textContent = msg || '';
+        }
+    }
+
+    function validateUsername(input) {
+        const val = input.value.trim();
+        if (!val) { setFieldState(input, 'fb-username', 'reset'); return false; }
+        if (val.length < 3) {
+            setFieldState(input, 'fb-username', 'invalid', 'Almeno 3 caratteri');
+            return false;
+        }
+        if (!/^[a-zA-Z0-9_\-]+$/.test(val)) {
+            setFieldState(input, 'fb-username', 'invalid', 'Solo lettere, numeri, _ e -');
+            return false;
+        }
+        setFieldState(input, 'fb-username', 'valid', 'Username valido');
+        return true;
+    }
+
+    function validateEmail(input) {
+        const val = input.value.trim();
+        if (!val) { setFieldState(input, 'fb-email', 'reset'); return false; }
+        const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+        if (!emailRe.test(val)) {
+            setFieldState(input, 'fb-email', 'invalid', 'Formato email non valido (es. nome@dominio.com)');
+            return false;
+        }
+        setFieldState(input, 'fb-email', 'valid', 'Email valida');
+        return true;
+    }
+
+    function validatePasswordStrength(input) {
+        const val = input.value;
+        if (!val) { setFieldState(input, 'fb-password', 'reset'); return false; }
+        if (val.length < 8) {
+            setFieldState(input, 'fb-password', 'invalid', `${val.length}/8 caratteri minimi`);
+            return false;
+        }
+        const hasUpper = /[A-Z]/.test(val);
+        const hasDigit = /[0-9]/.test(val);
+        let strength = 'Sicura';
+        if (!hasUpper && !hasDigit) strength = 'Debole — aggiungi numeri e maiuscole';
+        else if (!hasUpper || !hasDigit) strength = 'Discreta — aggiungi ' + (!hasUpper ? 'maiuscole' : 'numeri');
+        const ok = val.length >= 8;
+        setFieldState(input, 'fb-password', ok ? 'valid' : 'invalid', strength);
+        // Also revalidate confirm
+        const confirmEl = document.getElementById('confirm_password');
+        if (confirmEl.value) validateConfirm(confirmEl);
+        return ok;
+    }
+
+    function validateConfirm(input) {
+        const val = input.value;
+        const pwd = document.getElementById('password').value;
+        if (!val) { setFieldState(input, 'fb-confirm', 'reset'); return false; }
+        if (val !== pwd) {
+            setFieldState(input, 'fb-confirm', 'invalid', 'Le password non coincidono');
+            return false;
+        }
+        setFieldState(input, 'fb-confirm', 'valid', 'Le password coincidono');
+        return true;
+    }
+
+    // ===========================
+    // STATE
+    // ===========================
+    let currentStep = 1;
+    let orgChoice = null;
+    let orgExistsChoice = null;
+    let orgLookupData = null;    // dati org trovata tramite codice
+    let lookupTimeout = null;
+
+    // ===========================
+    // STEP NAVIGATION
+    // ===========================
+    function setStepIndicator(stepNum) {
+        for (let i = 1; i <= 3; i++) {
+            const item = document.getElementById('stepItem' + i);
+            item.classList.remove('active', 'completed');
+            if (i < stepNum) item.classList.add('completed');
+            else if (i === stepNum) item.classList.add('active');
+            const circle = item.querySelector('.step-circle');
+            if (i < stepNum) circle.innerHTML = '<i class="bi bi-check" style="font-size:0.9rem;"></i>';
+            else circle.textContent = i;
+        }
+    }
+
+    function showFormStep(stepId) {
+        document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
+        document.getElementById('step' + stepId).classList.add('active');
+        currentStep = stepId;
+    }
+
+    function activateStep(num) {
+        setStepIndicator(num);
+        showFormStep(num);
+    }
+
+    // ===========================
+    // STEP 1 → 2
+    // ===========================
+    function goToStep2() {
+        const usernameEl = document.getElementById('username');
+        const emailEl    = document.getElementById('email');
+        const pwdEl      = document.getElementById('password');
+        const confEl     = document.getElementById('confirm_password');
+
+        const okUser    = validateUsername(usernameEl);
+        const okEmail   = validateEmail(emailEl);
+        const okPwd     = validatePasswordStrength(pwdEl);
+        const okConfirm = validateConfirm(confEl);
+
+        if (!okUser) {
+            showToast('warning', 'Username non valido', 'Deve essere di almeno 3 caratteri (solo lettere, numeri, _ e -)');
+            usernameEl.focus();
+            return;
+        }
+        if (!okEmail) {
+            showToast('warning', 'Email non valida', 'Inserisci un indirizzo email nel formato corretto');
+            emailEl.focus();
+            return;
+        }
+        if (!okPwd) {
+            showToast('warning', 'Password troppo corta', 'La password deve essere di almeno 8 caratteri');
+            pwdEl.focus();
+            return;
+        }
+        if (!okConfirm) {
+            showToast('warning', 'Password non coincide', 'Verifica che le due password siano uguali');
+            confEl.focus();
+            return;
+        }
+
+        activateStep(2);
+        showSub('2a');
+    }
+
+    // ===========================
+    // STEP 2 sub-navigation
+    // ===========================
+    function showSub(sub) {
+        ['sub2a','sub2b','sub2cJoin','sub2cNew','sub2aBack'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+        if (sub === '2a') {
+            document.getElementById('sub2a').style.display = 'block';
+        } else if (sub === '2b') {
+            document.getElementById('sub2b').style.display = 'block';
+            document.getElementById('sub2aBack').style.display = 'block';
+        } else if (sub === '2cJoin') {
+            document.getElementById('sub2cJoin').style.display = 'block';
+        } else if (sub === '2cNew') {
+            document.getElementById('sub2cNew').style.display = 'block';
+        }
+    }
+
+    function selectOrg(choice) {
+        orgChoice = choice;
+        document.getElementById('hasOrgInput').value = choice;
+        document.getElementById('cardYes').classList.toggle('selected', choice === 'yes');
+        document.getElementById('cardNo').classList.toggle('selected', choice === 'no');
+        if (choice === 'yes') {
+            setTimeout(() => showSub('2b'), 200);
+        } else {
+            setTimeout(() => goToStep3(), 200);
+        }
+    }
+
+    function selectOrgExists(choice) {
+        orgExistsChoice = choice;
+        document.getElementById('orgExistsInput').value = choice;
+        document.getElementById('cardExists').classList.toggle('selected', choice === 'yes');
+        document.getElementById('cardNew').classList.toggle('selected', choice === 'no');
+        setTimeout(() => showSub(choice === 'yes' ? '2cJoin' : '2cNew'), 200);
+    }
+
+    function backToSub2b() { showSub('2b'); }
+
+    // ===========================
+    // INVITE CODE LOOKUP
+    // ===========================
+    function onInviteCodeInput(input) {
+        input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+        // Reset states
+        document.getElementById('codeLookupLoading').style.display = 'none';
+        document.getElementById('codeLookupError').style.display = 'none';
+        document.getElementById('orgPreviewCard').classList.remove('visible');
+        orgLookupData = null;
+        setBtnJoinState(false);
+
+        if (input.value.length < 6) return;
+
+        // Debounce 400ms
+        clearTimeout(lookupTimeout);
+        lookupTimeout = setTimeout(() => lookupOrgCode(input.value), 400);
+    }
+
+    async function lookupOrgCode(code) {
+        document.getElementById('codeLookupLoading').style.display = 'flex';
+        document.getElementById('codeLookupError').style.display = 'none';
+        document.getElementById('orgPreviewCard').classList.remove('visible');
+
+        try {
+            const res = await fetch(`/api/organizations/lookup?code=${encodeURIComponent(code)}`);
+            document.getElementById('codeLookupLoading').style.display = 'none';
+
+            if (res.ok) {
+                const data = await res.json();
+                if (data.found) {
+                    orgLookupData = data;
+                    renderOrgPreview(data);
+                    setBtnJoinState(true);
+                    showToast('success', 'Organizzazione trovata!', data.name);
+                } else {
+                    showLookupError(data.message || 'Codice non trovato');
+                }
+            } else {
+                const data = await res.json().catch(() => ({}));
+                showLookupError(data.message || 'Nessuna organizzazione trovata con questo codice');
+            }
+        } catch (e) {
+            document.getElementById('codeLookupLoading').style.display = 'none';
+            showLookupError('Errore di rete. Verifica la connessione.');
+        }
+    }
+
+    function showLookupError(msg) {
+        const el = document.getElementById('codeLookupError');
+        document.getElementById('codeLookupErrorMsg').textContent = msg;
+        el.style.display = 'flex';
+        setBtnJoinState(false);
+        showToast('error', 'Codice non valido', msg);
+    }
+
+    function setBtnJoinState(enabled) {
+        const btn = document.getElementById('btnContinueJoin');
+        btn.disabled = !enabled;
+        btn.style.opacity = enabled ? '1' : '0.5';
+        btn.style.cursor  = enabled ? 'pointer' : 'not-allowed';
+    }
+
+    function renderOrgPreview(data) {
+        document.getElementById('orgPreviewName').textContent = data.name;
+        let rows = '';
+        if (data.address) {
+            rows += `<div class="org-preview-row"><i class="bi bi-geo-alt"></i><span>${escHtml(data.address)}</span></div>`;
+        }
+        if (data.phone) {
+            rows += `<div class="org-preview-row"><i class="bi bi-telephone"></i><span>${escHtml(data.phone)}</span></div>`;
+        }
+        rows += `<div class="org-preview-row"><i class="bi bi-people"></i>
+            <span>${data.member_count} membro${data.member_count !== 1 ? 'i' : ''} già iscritto${data.member_count !== 1 ? '' : ''}</span>
+        </div>`;
+        rows += `<div class="org-preview-row"><i class="bi bi-calendar3"></i><span>Creata il ${escHtml(data.created_at)}</span></div>`;
+        document.getElementById('orgPreviewDetails').innerHTML = rows;
+        document.getElementById('orgPreviewCard').classList.add('visible');
+    }
+
+    // ===========================
+    // STEP 2 → 3
+    // ===========================
+    function goToStep3() {
+        if (orgChoice === 'yes') {
+            if (!orgExistsChoice) {
+                showToast('warning', 'Scegli un\'opzione', 'Seleziona se l\'organizzazione esiste già o meno');
+                return;
+            }
+            if (orgExistsChoice === 'yes') {
+                const code = document.getElementById('invite_code').value.trim();
+                if (!code || code.length !== 6) {
+                    showToast('warning', 'Codice mancante', 'Inserisci il codice a 6 caratteri dell\'organizzazione');
+                    document.getElementById('invite_code').focus();
+                    return;
+                }
+                if (!orgLookupData) {
+                    showToast('error', 'Organizzazione non verificata', 'Attendi la verifica del codice o inseriscine uno valido');
+                    return;
+                }
+            } else {
+                const name = document.getElementById('org_name').value.trim();
+                if (!name || name.length < 2) {
+                    showToast('warning', 'Nome mancante', 'Inserisci il nome dell\'azienda (almeno 2 caratteri)');
+                    document.getElementById('org_name').focus();
+                    return;
+                }
+            }
+        }
+        buildSummary();
+        activateStep(3);
+    }
+
+    // ===========================
+    // STEP 3 ← BACK
+    // ===========================
+    function backToStep2() {
+        activateStep(2);
+        if (orgChoice === 'yes' && orgExistsChoice) {
+            showSub(orgExistsChoice === 'yes' ? '2cJoin' : '2cNew');
+        } else {
+            showSub('2a');
+        }
+    }
+
+    function goToStep1() { activateStep(1); }
+
+    // ===========================
+    // SUMMARY
+    // ===========================
+    function buildSummary() {
+        const username = document.getElementById('username').value.trim();
+        const email    = document.getElementById('email').value.trim();
+
+        let rows = `
+            <div style="display:flex;flex-direction:column;gap:10px;padding:4px 0 8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.875rem;">
+                    <span style="color:var(--iris-text-muted);">Username</span>
+                    <span style="font-weight:700;color:var(--iris-text-primary);">${escHtml(username)}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.875rem;">
+                    <span style="color:var(--iris-text-muted);">Email</span>
+                    <span style="font-weight:600;color:var(--iris-text-primary);">${escHtml(email)}</span>
+                </div>`;
+
+        if (!orgChoice || orgChoice === 'no') {
+            rows += `
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.875rem;">
+                    <span style="color:var(--iris-text-muted);">Workspace</span>
+                    <span style="font-weight:600;color:var(--iris-text-muted);">Solo personale</span>
+                </div>`;
+        } else if (orgExistsChoice === 'yes' && orgLookupData) {
+            rows += `
+                <div style="border-top:1px solid var(--iris-border);padding-top:10px;margin-top:2px;">
+                    <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--iris-success);margin-bottom:8px;">
+                        <i class="bi bi-building-fill me-1"></i>Unirsi a
+                    </div>
+                    <div style="font-size:0.9375rem;font-weight:800;color:var(--iris-text-primary);margin-bottom:4px;">${escHtml(orgLookupData.name)}</div>
+                    ${orgLookupData.address ? `<div style="font-size:0.8rem;color:var(--iris-text-muted);"><i class="bi bi-geo-alt me-1"></i>${escHtml(orgLookupData.address)}</div>` : ''}
+                    <div style="font-size:0.8rem;color:var(--iris-text-muted);margin-top:3px;"><i class="bi bi-people me-1"></i>${orgLookupData.member_count} membri</div>
+                </div>`;
+        } else if (orgExistsChoice === 'no') {
+            const orgName = document.getElementById('org_name').value.trim();
+            const orgAddr = document.getElementById('org_address').value.trim();
+            const orgPhone= document.getElementById('org_phone').value.trim();
+            rows += `
+                <div style="border-top:1px solid var(--iris-border);padding-top:10px;margin-top:2px;">
+                    <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--iris-accent);margin-bottom:8px;">
+                        <i class="bi bi-building-add me-1"></i>Creare nuova azienda
+                    </div>
+                    <div style="font-size:0.9375rem;font-weight:800;color:var(--iris-text-primary);margin-bottom:4px;">${escHtml(orgName)}</div>
+                    ${orgAddr ? `<div style="font-size:0.8rem;color:var(--iris-text-muted);"><i class="bi bi-geo-alt me-1"></i>${escHtml(orgAddr)}</div>` : ''}
+                    ${orgPhone ? `<div style="font-size:0.8rem;color:var(--iris-text-muted);margin-top:3px;"><i class="bi bi-telephone me-1"></i>${escHtml(orgPhone)}</div>` : ''}
+                    <div style="font-size:0.75rem;color:var(--iris-accent);margin-top:6px;"><i class="bi bi-key-fill me-1"></i>Riceverai un codice invito per i tuoi colleghi</div>
+                </div>`;
+        }
+
+        rows += '</div>';
+        document.getElementById('summaryDetails').innerHTML = rows;
+        document.getElementById('summaryText').textContent = 'Controlla i dati e conferma la registrazione.';
+    }
+
+    // ===========================
+    // SUBMIT
+    // ===========================
+    document.getElementById('regForm').addEventListener('submit', function(e) {
+        const btn = document.getElementById('submitBtn');
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creazione account…';
+        btn.disabled = true;
+    });
+
+    // ===========================
+    // RESTORE ON SERVER ERROR
+    // ===========================
+    {% if errors %}
+    (function() {
+        showToast('error', 'Errore di registrazione', '{{ errors[0]|e }}');
+    })();
+    {% endif %}
+    </script>
+</body>
+</html>

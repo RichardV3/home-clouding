@@ -875,7 +875,8 @@ def dashboard():
                 })
 
         return render_template('folder.html', folders=folders, user=user,
-                               user_workspaces=user_workspaces, active_workspace=None)
+                               user_workspaces=user_workspaces, active_workspace=None,
+                               user_permissions=ALL_PERMISSION_KEYS)
     except Exception as e:
         logger.error(f"Dashboard error: {e}")
         return render_template('500.html'), 500
@@ -888,6 +889,7 @@ def view_folder(folder_id):
     try:
         user = get_current_user()
         folder = Folder.query.get_or_404(folder_id)
+        member = None  # will be set if folder belongs to an org workspace
 
         # Access control
         if folder.workspace_id:
@@ -908,6 +910,9 @@ def view_folder(folder_id):
             if org.workspace:
                 user_workspaces.append({'workspace': org.workspace, 'org': org, 'role': m.role})
 
+        # Effective permissions for this folder context
+        folder_perms = _get_effective_permissions(member) if member else ALL_PERMISSION_KEYS[:]
+
         if folder.is_encrypted:
             locked = not session.get(f'folder_{folder_id}_unlocked', False)
             files = [] if locked else File.query.filter_by(folder_id=folder_id).all()
@@ -918,7 +923,8 @@ def view_folder(folder_id):
         files = File.query.filter_by(folder_id=folder_id).all()
         return render_template('folder.html', folder=folder, files=files,
                                user=user, user_workspaces=user_workspaces,
-                               active_workspace=folder.workspace_id)
+                               active_workspace=folder.workspace_id,
+                               user_permissions=folder_perms)
     except Exception as e:
         logger.error(f"View folder error: {e}")
         return render_template('500.html'), 500
@@ -1506,11 +1512,13 @@ def workspace_view(workspace_id):
             if o.workspace:
                 user_workspaces.append({'workspace': o.workspace, 'org': o, 'role': m.role})
 
+        effective_perms = _get_effective_permissions(member)
         return render_template('folder.html', folders=folders, user=user,
                                user_workspaces=user_workspaces,
                                active_workspace=workspace_id,
                                active_org=org,
-                               active_member_role=member.role)
+                               active_member_role=member.role,
+                               user_permissions=effective_perms)
     except Exception as e:
         logger.error(f"Workspace view error: {e}")
         return render_template('500.html'), 500
@@ -2101,6 +2109,9 @@ def handle_ws_connect():
         'folder_id': None,
         'connected_at': datetime.utcnow().isoformat(),
     }
+    # Send directly to this socket (guaranteed delivery for the connecting client)
+    sio_emit('users_online', list(online_users.values()))
+    # Broadcast updated list to all other connected clients
     socketio.emit('users_online', list(online_users.values()))
 
 

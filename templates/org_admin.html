@@ -562,23 +562,38 @@ async function loadStats() {
 
 // ===== ONLINE PRESENCE (Socket.IO) =====
 let onlineUserIds = new Set();
+
+function updateOnlineStatus(users) {
+    onlineUserIds = new Set((users || []).map(u => u.user_id));
+    document.querySelectorAll('[data-member-uid]').forEach(el => {
+        const uid = parseInt(el.dataset.memberUid);
+        el.querySelectorAll('.member-online-dot').forEach(dot => {
+            dot.style.background = onlineUserIds.has(uid) ? 'var(--iris-success)' : 'rgba(148,163,184,0.25)';
+        });
+        const statusCell = el.querySelector('.member-status-cell');
+        if (statusCell) statusCell.innerHTML = onlineUserIds.has(uid)
+            ? '<span style="color:var(--iris-success);font-weight:600;font-size:0.75rem;"><i class="bi bi-circle-fill me-1" style="font-size:0.5rem;"></i>Online</span>'
+            : '<span style="color:var(--iris-text-muted);font-size:0.75rem;">Offline</span>';
+    });
+}
+
 function initSocketPresence() {
     try {
-        const socket = io({ transports: ['websocket','polling'] });
-        socket.on('users_online', (users) => {
-            onlineUserIds = new Set((users||[]).map(u => u.user_id));
-            document.querySelectorAll('[data-member-uid]').forEach(el => {
-                const uid = parseInt(el.dataset.memberUid);
-                el.querySelectorAll('.member-online-dot').forEach(dot => {
-                    dot.style.background = onlineUserIds.has(uid) ? 'var(--iris-success)' : 'rgba(148,163,184,0.25)';
-                });
-                const statusCell = el.querySelector('.member-status-cell');
-                if (statusCell) statusCell.innerHTML = onlineUserIds.has(uid)
-                    ? '<span style="color:var(--iris-success);font-weight:600;font-size:0.75rem;"><i class="bi bi-circle-fill me-1" style="font-size:0.5rem;"></i>Online</span>'
-                    : '<span style="color:var(--iris-text-muted);font-size:0.75rem;">Offline</span>';
-            });
+        const socket = io({ transports: ['websocket', 'polling'] });
+
+        // As soon as we connect, fetch online users via REST (most reliable)
+        socket.on('connect', async () => {
+            try {
+                const r = await fetch('/api/users/online');
+                const d = await r.json();
+                if (d.success) updateOnlineStatus(d.users);
+            } catch (e) { /* ignore */ }
         });
-    } catch(e) { console.warn('Socket.IO not available'); }
+
+        // Also handle real-time push events from the server
+        socket.on('users_online', (users) => updateOnlineStatus(users));
+
+    } catch (e) { console.warn('Socket.IO not available'); }
 }
 
 /* ===== MEMBERS ===== */

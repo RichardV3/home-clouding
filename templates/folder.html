@@ -42,6 +42,25 @@
         .excel-spinner { width: 36px; height: 36px; border: 3px solid var(--iris-border); border-top-color: var(--iris-accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
         /* Folder card date/creator */
         .folder-card-datetime { font-size: 0.7rem; color: var(--iris-text-muted); margin-top: 5px; display: flex; align-items: center; gap: 4px; }
+
+        /* ===== RESPONSIVE FIXES ===== */
+        /* Prevent horizontal overflow caused by long names or flex overflow */
+        .main-content { overflow-x: hidden; }
+        .topbar-title  { min-width: 0; }
+
+        /* Compact upload zone in folder view on mobile */
+        @media (max-width: 768px) {
+            #uploadZoneWrapper .iris-upload-zone { padding: 16px 14px; }
+            #uploadZoneWrapper .iris-upload-icon { width: 36px; height: 36px; font-size: 1.1rem; margin-bottom: 6px; }
+            #uploadZoneWrapper .iris-upload-zone p { font-size: 0.8rem; margin-bottom: 2px; }
+        }
+        /* Very small screens: hide preview button to save space in file rows */
+        @media (max-width: 420px) {
+            .file-actions [data-action="preview"] { display: none; }
+            .file-actions [data-action="excel"]   { display: none; }
+        }
+        /* Permission-hidden elements */
+        .perm-hidden { display: none !important; }
     </style>
 
     <style>
@@ -600,8 +619,7 @@
             {% endif %}
 
             <div class="sidebar-section-label">Azioni</div>
-            <button class="sidebar-link" onclick="openCreateModal()">
-                <i class="bi bi-folder-plus"></i> Nuova Cartella
+            <button class="sidebar-link" id="sidebarCreateFolderLink" onclick="openCreateModal()">
             </button>
             <button class="sidebar-link" id="uploadTriggerBtn" style="display:none;" onclick="document.getElementById('fileInput').click()">
                 <i class="bi bi-upload"></i> Carica File
@@ -701,7 +719,7 @@
                         <div class="page-title" id="pageTitle">{% if active_org %}{{ active_org.name }}{% else %}Le tue cartelle{% endif %}</div>
                         <div class="page-subtitle" id="folderCountLabel">Caricamento…</div>
                     </div>
-                    <button class="btn-iris btn-iris-primary" onclick="openCreateModal()">
+                    <button class="btn-iris btn-iris-primary" id="createFolderHeaderBtn" onclick="openCreateModal()">
                         <i class="bi bi-plus-lg"></i> Nuova cartella
                     </button>
                 </div>
@@ -736,7 +754,7 @@
                     </div>
                     <div style="display:flex;gap:8px;">
                         <button class="btn-iris btn-iris-ghost btn-iris-sm" onclick="showDashboard()"><i class="bi bi-arrow-left"></i> Indietro</button>
-                        <button class="btn-iris btn-iris-primary btn-iris-sm" onclick="document.getElementById('fileInput').click()"><i class="bi bi-upload"></i> Carica</button>
+                        <button class="btn-iris btn-iris-primary btn-iris-sm" id="uploadHeaderBtn" onclick="document.getElementById('fileInput').click()"><i class="bi bi-upload"></i> Carica</button>
                     </div>
                 </div>
 
@@ -747,7 +765,7 @@
                 </div>
 
                 <!-- Upload zone -->
-                <div style="margin-bottom:24px;">
+                <div id="uploadZoneWrapper" style="margin-bottom:24px;">
                     <div class="iris-upload-zone" id="uploadZone"
                          onclick="document.getElementById('fileInput').click()"
                          ondragover="event.preventDefault();this.classList.add('drag-over')"
@@ -982,12 +1000,38 @@ let currentFolderName = '';
 let allFolders = [];
 let allFiles = [];
 let activeWorkspaceId = {% if active_workspace %}{{ active_workspace }}{% else %}null{% endif %};
-let activeWorkspaceName = {% if active_org %}'{{ active_org.name|e }}'{% else %}null{% endif %};
+let activeWorkspaceName = {{ (active_org.name|tojson) if active_org else 'null' }};
+
+// =====================================================================
+// PERMISSIONS
+// =====================================================================
+const USER_PERMS = new Set({{ user_permissions | tojson }});
+function can(perm) { return USER_PERMS.has(perm); }
+
+function applyPermissions() {
+    // "Nuova Cartella" buttons
+    const canCreate = can('create_folders');
+    ['createFolderHeaderBtn', 'sidebarCreateFolderLink'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('perm-hidden', !canCreate);
+    });
+    // Upload zone (applies when in folder view)
+    const uploadWrap = document.getElementById('uploadZoneWrapper');
+    if (uploadWrap) uploadWrap.classList.toggle('perm-hidden', !can('upload_files'));
+    // Upload sidebar trigger
+    const uTrig = document.getElementById('uploadTriggerBtn');
+    if (uTrig && uTrig.style.display !== 'none')
+        uTrig.classList.toggle('perm-hidden', !can('upload_files'));
+    // Upload header button
+    const uHead = document.getElementById('uploadHeaderBtn');
+    if (uHead) uHead.classList.toggle('perm-hidden', !can('upload_files'));
+}
 
 // =====================================================================
 // INIT
 // =====================================================================
 document.addEventListener('DOMContentLoaded', () => {
+    applyPermissions();
     {% if folder %}
         openFolder({{ folder.id }}, {{ folder.name|tojson }});
     {% else %}
@@ -1070,10 +1114,13 @@ function renderFolders(folders) {
         const dateStr = dt.toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'numeric'});
         const timeStr = dt.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
         const creator = f.created_by_display || f.created_by_username || '';
+        const delBtn = can('delete_folders')
+            ? `<button class="card-del-btn" data-delete-id="${f.id}" title="Elimina"><i class="bi bi-trash3"></i></button>`
+            : '';
         return `<div class="folder-card" data-folder-id="${f.id}">
             <div class="folder-card-actions">
                 <button class="card-edit-btn" data-edit-id="${f.id}" title="Modifica"><i class="bi bi-pencil"></i></button>
-                <button class="card-del-btn" data-delete-id="${f.id}" title="Elimina"><i class="bi bi-trash3"></i></button>
+                ${delBtn}
             </div>
             <div class="folder-card-icon-wrap ${enc?'folder-icon-encrypt':'folder-icon-normal'}">
                 <i class="bi ${icon}"></i>
@@ -1142,7 +1189,14 @@ async function openFolder(folderId, folderName) {
     currentFolderName = folderName || 'Cartella';
     document.getElementById('dashboardView').style.display = 'none';
     document.getElementById('folderView').style.display = 'block';
-    document.getElementById('uploadTriggerBtn').style.display = 'flex';
+    // Upload buttons: visible only if user can upload
+    const canUp = can('upload_files');
+    document.getElementById('uploadTriggerBtn').style.display = canUp ? 'flex' : 'none';
+    const uHead = document.getElementById('uploadHeaderBtn');
+    if (uHead) uHead.style.display = canUp ? '' : 'none';
+    const uWrap = document.getElementById('uploadZoneWrapper');
+    if (uWrap) uWrap.style.display = canUp ? '' : 'none';
+
     document.getElementById('folderViewTitle').textContent = currentFolderName;
     document.getElementById('breadcrumbFolder').textContent = currentFolderName;
     document.getElementById('topbarTitle').innerHTML = `<a href="#" onclick="showDashboard()">Dashboard</a> <span>/ ${escapeHtml(currentFolderName)}</span>`;
@@ -1206,6 +1260,9 @@ function renderFiles(files) {
         const excelBtn = isExcelFile(f.name)
             ? `<button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="excel" title="Apri Excel" style="color:var(--iris-success);"><i class="bi bi-table"></i></button>`
             : '';
+        const delBtn = can('delete_files')
+            ? `<button class="btn-iris btn-iris-danger btn-iris-icon btn-iris-sm" data-action="delete" title="Elimina"><i class="bi bi-trash3"></i></button>`
+            : '';
         return `<div class="file-row" data-file-id="${f.id}">
             <div class="file-type-bar ftype-${t}"></div>
             <div class="file-icon-wrap" style="background:${color}20;">
@@ -1219,7 +1276,7 @@ function renderFiles(files) {
                 ${excelBtn}
                 <button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="preview" title="Anteprima"><i class="bi bi-eye"></i></button>
                 <button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="download" title="Scarica"><i class="bi bi-download"></i></button>
-                <button class="btn-iris btn-iris-danger btn-iris-icon btn-iris-sm" data-action="delete" title="Elimina"><i class="bi bi-trash3"></i></button>
+                ${delBtn}
             </div>
         </div>`;
     }).join('');
@@ -1229,7 +1286,8 @@ function renderFiles(files) {
         const file = files.find(f => f.id === fid);
         row.querySelector('[data-action="preview"]').addEventListener('click', () => openPreview(fid, file ? file.name : ''));
         row.querySelector('[data-action="download"]').addEventListener('click', () => downloadFile(fid, file ? file.name : `file_${fid}`));
-        row.querySelector('[data-action="delete"]').addEventListener('click', () => deleteFile(fid));
+        const delBtn = row.querySelector('[data-action="delete"]');
+        if (delBtn) delBtn.addEventListener('click', () => deleteFile(fid));
         const excelBtn = row.querySelector('[data-action="excel"]');
         if (excelBtn) excelBtn.addEventListener('click', () => openExcelModal(fid, file ? file.name : ''));
     });
@@ -1248,6 +1306,7 @@ function handleSearch(q) {
 // CREATE FOLDER
 // =====================================================================
 function openCreateModal() {
+    if (!can('create_folders')) { showToast('error', 'Permesso negato', 'Non hai il permesso per creare cartelle'); return; }
     const m = document.getElementById('createModal');
     m.style.display = 'flex';
     ['newFolderName','newFolderDesc','newFolderPassword'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
@@ -1258,6 +1317,7 @@ function openCreateModal() {
 function closeModal() { document.getElementById('createModal').style.display = 'none'; }
 
 async function createFolder() {
+    if (!can('create_folders')) { showToast('error', 'Permesso negato', 'Non puoi creare cartelle'); return; }
     const name = document.getElementById('newFolderName').value.trim();
     const description = document.getElementById('newFolderDesc').value.trim();
     const isEncrypted = document.getElementById('isEncrypted').checked;
@@ -1338,6 +1398,7 @@ async function saveEditFolder() {
 // =====================================================================
 async function deleteFolder(folderId, event) {
     event.stopPropagation();
+    if (!can('delete_folders')) { showToast('error', 'Permesso negato', 'Non puoi eliminare cartelle'); return; }
     const folder = allFolders.find(f => f.id === folderId);
     const name = folder ? folder.name : 'questa cartella';
     if (!confirm(`Eliminare "${name}" e tutti i suoi file? Azione irreversibile.`)) return;
@@ -1350,6 +1411,7 @@ async function deleteFolder(folderId, event) {
 }
 
 async function deleteFile(fileId) {
+    if (!can('delete_files')) { showToast('error', 'Permesso negato', 'Non puoi eliminare file'); return; }
     const file = allFiles.find(f => f.id === fileId);
     const name = file ? file.name : 'questo file';
     if (!confirm(`Eliminare "${name}"?`)) return;
@@ -1413,6 +1475,7 @@ function handleDragLeave(event) {
 }
 
 async function uploadFiles(fileList) {
+    if (!can('upload_files')) { showToast('error', 'Permesso negato', 'Non puoi caricare file'); return; }
     if (!currentFolderId) { showToast('warning', 'Attenzione', 'Apri una cartella prima di caricare'); return; }
     if (!fileList || !fileList.length) return;
     for (const file of fileList) { await uploadSingleFile(file); }

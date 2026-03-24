@@ -1609,9 +1609,7 @@ async function refreshDiskList() {
                     <div style="display:flex;align-items:center;gap:8px;">
                         ${disk.is_active
                             ? `<span class="iris-badge iris-badge-accent"><i class="bi bi-check-circle-fill me-1"></i>Attivo</span>`
-                            : `<button class="btn-iris btn-iris-primary btn-iris-sm" onclick="switchDisk('${escapeHtml(disk.mountpoint)}')">
-                                <i class="bi bi-arrow-repeat"></i> Usa questo
-                               </button>`}
+                            : `<button class="btn-iris btn-iris-primary btn-iris-sm" data-mp="${escapeHtml(disk.mountpoint)}" onclick="switchDisk(this.dataset.mp)"><i class="bi bi-arrow-repeat"></i> Usa questo</button>`}
                     </div>
                 </div>
                 <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--iris-text-muted);margin-bottom:5px;">

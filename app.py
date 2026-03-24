@@ -2347,4 +2347,5 @@ if __name__ == '__main__':
         debug=False,
         use_reloader=False,
         log_output=False,
+        allow_unsafe_werkzeug=True,
     )

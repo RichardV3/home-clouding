@@ -1,0 +1,38 @@
+"C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Scripts\python.exe" "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\app.py"
+C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-packages\flask_limiter\extension.py:336: UserWarning: Using the in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about configuring the storage backend.
+  warnings.warn(
+[I 2026-03-24 16:13:02] concurrency model: async
+[I 2026-03-24 16:13:02] masquerade (NAT) address: None
+[I 2026-03-24 16:13:02] passive ports: 60000->60100
+[I 2026-03-24 16:13:02] >>> starting FTP server on 0.0.0.0:2121, pid=24880 <<<
+════════════════════════════════════════════════════════════════════════════════
+🚀 IRIS-VE v2.0 STARTUP
+════════════════════════════════════════════════════════════════════════════════
+
+📍 Local Access:  http://192.168.1.137:5000
+🌐 Remote Access: http://151.31.202.184:9000
+📁 FTP Access:    ftp://192.168.1.137:2121
+
+⚙️  NETWORK CONFIGURATION
+   Internal Port (Flask):  5000
+   External Port (HTTP):   9000
+   FTP Port:               2121
+   Local IP:               192.168.1.137
+   Public IP:              151.31.202.184
+
+🔧 PORT FORWARDING SETUP (router)
+   Porta 80    → 192.168.1.137:80    (nginx HTTP)
+   Porta 9000 → 192.168.1.137:5000  (Flask diretto)
+   Porta 2121  → 192.168.1.137:2121  (FTP control)
+   Porte 60000-60100 → 192.168.1.137 (FTP passive data)
+
+✅ Server pronto!
+════════════════════════════════════════════════════════════════════════════════
+Traceback (most recent call last):
+  File "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\app.py", line 2343, in <module>
+    socketio.run(
+  File "C:\Users\Riccardo Vincenzi\Documents\GitHub\home-clouding\.venv\Lib\site-packages\flask_socketio\__init__.py", line 664, in run
+    raise RuntimeError('The Werkzeug web server is not '
+RuntimeError: The Werkzeug web server is not designed to run in production. Pass allow_unsafe_werkzeug=True to the run() method to disable this error.
+
+Process finished with exit code 1

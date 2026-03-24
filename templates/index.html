@@ -276,9 +276,35 @@
         }
 
         @media (max-width: 576px) {
-            .login-card { padding: 28px 24px; }
+            .login-card { padding: 28px 20px; }
             .hero-title  { font-size: 2.4rem; }
+            .hero-section { padding: 80px 16px 48px; }
+            .features-section { padding: 60px 16px; }
+            .section-desc { margin-bottom: 36px; }
         }
+
+        @media (max-width: 480px) {
+            .login-card { padding: 24px 16px; }
+            .hero-title  { font-size: 2rem; letter-spacing: -0.03em; }
+            .hero-subtitle { font-size: 0.9375rem; margin-bottom: 32px; }
+            .hero-section { padding: 72px 12px 40px; }
+            .login-icon { width: 52px; height: 52px; font-size: 1.4rem; }
+            .login-title { font-size: 1.2rem; }
+            .btn-login { padding: 13px; font-size: 0.9375rem; }
+            .features-section { padding: 48px 12px; }
+            .feature-card { padding: 22px 18px; }
+            .iris-footer { padding: 28px 16px; font-size: 0.8125rem; }
+            .iris-footer p:last-child { font-size: 0.7rem; }
+            /* Hero badge compact */
+            .hero-badge { font-size: 0.75rem; padding: 5px 12px; }
+            /* Orbs smaller to avoid horizontal overflow */
+            .orb-1 { width: 300px; height: 300px; }
+            .orb-2 { width: 250px; height: 250px; }
+            .orb-3 { width: 200px; height: 200px; }
+        }
+
+        /* Fix overflowing orbs */
+        body { overflow-x: hidden; }
     </style>
 </head>
 <body>

@@ -8,6 +8,41 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='iris-ve.css') }}">
+    <style>
+        /* ===== EXTRA v3.2 ===== */
+        /* Presence badge in topbar */
+        .online-badge { display: flex; align-items: center; gap: 6px; padding: 5px 12px; background: var(--iris-bg-card); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-pill); font-size: 0.8rem; color: var(--iris-text-secondary); cursor: pointer; transition: var(--iris-transition); flex-shrink: 0; }
+        .online-badge:hover { background: var(--iris-bg-card-hover); border-color: rgba(99,102,241,0.3); }
+        .online-dot { width: 8px; height: 8px; background: var(--iris-success); border-radius: 50%; flex-shrink: 0; animation: iris-pulse-ring 2s infinite; }
+        /* Folder presence bar */
+        .folder-presence { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(99,102,241,0.07); border: 1px solid rgba(99,102,241,0.15); border-radius: var(--iris-radius-pill); font-size: 0.8125rem; color: var(--iris-accent-3); margin-bottom: 16px; }
+        .folder-presence i { font-size: 0.9rem; }
+        /* Excel modal */
+        .excel-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 9500; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .excel-modal { background: var(--iris-bg-modal); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-xl); width: 100%; max-width: 1100px; height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+        .excel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--iris-border); flex-shrink: 0; gap: 10px; }
+        .excel-title { font-size: 0.9375rem; font-weight: 700; color: var(--iris-text-primary); display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .excel-tabs { display: flex; gap: 4px; padding: 8px 20px 0; border-bottom: 1px solid var(--iris-border); flex-shrink: 0; overflow-x: auto; background: var(--iris-bg-deep); }
+        .excel-tab { padding: 6px 16px; border-radius: var(--iris-radius-md) var(--iris-radius-md) 0 0; font-size: 0.8125rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; border-bottom: none; color: var(--iris-text-muted); background: none; transition: var(--iris-transition); white-space: nowrap; }
+        .excel-tab.active { background: var(--iris-bg-modal); border-color: var(--iris-border); color: var(--iris-text-primary); }
+        .excel-tab:hover:not(.active) { background: var(--iris-bg-card); color: var(--iris-text-primary); }
+        .excel-body { flex: 1; overflow: auto; padding: 0; position: relative; }
+        .excel-table-wrap { overflow: auto; height: 100%; }
+        .excel-table { border-collapse: collapse; font-size: 0.8125rem; min-width: 100%; }
+        .excel-table th { position: sticky; top: 0; z-index: 2; background: var(--iris-bg-card); color: var(--iris-text-muted); font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 10px; border: 1px solid var(--iris-border); min-width: 32px; text-align: center; user-select: none; }
+        .excel-table .row-header { position: sticky; left: 0; z-index: 3; background: var(--iris-bg-card); color: var(--iris-text-muted); font-size: 0.7rem; font-weight: 600; padding: 4px 8px; border: 1px solid var(--iris-border); text-align: center; min-width: 40px; }
+        .excel-table td { border: 1px solid rgba(255,255,255,0.06); padding: 3px; min-width: 80px; max-width: 200px; vertical-align: top; }
+        [data-theme="light"] .excel-table td { border-color: rgba(0,0,0,0.08); }
+        .excel-cell { width: 100%; min-height: 22px; padding: 2px 6px; background: transparent; border: none; font-size: 0.8125rem; color: var(--iris-text-primary); font-family: inherit; resize: none; overflow: hidden; white-space: nowrap; }
+        .excel-cell:focus { outline: 2px solid var(--iris-accent); outline-offset: -2px; background: rgba(99,102,241,0.08); }
+        .excel-footer { padding: 10px 20px; border-top: 1px solid var(--iris-border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 10px; flex-wrap: wrap; }
+        .excel-status { font-size: 0.8rem; color: var(--iris-text-muted); }
+        .excel-status.modified { color: var(--iris-warning); }
+        .excel-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; color: var(--iris-text-muted); gap: 12px; }
+        .excel-spinner { width: 36px; height: 36px; border: 3px solid var(--iris-border); border-top-color: var(--iris-accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        /* Folder card date/creator */
+        .folder-card-datetime { font-size: 0.7rem; color: var(--iris-text-muted); margin-top: 5px; display: flex; align-items: center; gap: 4px; }
+    </style>
 
     <style>
         .app-layout { display: flex; min-height: 100vh; }
@@ -289,13 +324,45 @@
 
         @media (max-width: 768px) {
             .sidebar { transform: translateX(-100%); }
-            .sidebar.mobile-open { transform: translateX(0); }
+            .sidebar.mobile-open { transform: translateX(0); box-shadow: 4px 0 32px rgba(0,0,0,0.4); }
             .main-content { margin-left: 0; }
             .sidebar-toggle { display: flex; }
             .content-area { padding: 14px; }
-            .topbar { padding: 10px 14px; }
+            .topbar { padding: 10px 14px; position: sticky; }
             .topbar-search { display: none; }
             .folders-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+            /* Page header: wrap buttons below title on mobile */
+            .page-header { flex-wrap: wrap; }
+            .page-header > div:first-child { flex: 1 1 100%; }
+            .page-header > button, .page-header > div[style*="gap"] { width: 100%; }
+            .page-header > button { width: 100%; justify-content: center; }
+            .page-header > div[style*="gap"] button { flex: 1; }
+            /* Page titles */
+            .page-title { font-size: 1.2rem; }
+            /* Upload zone more compact */
+            .iris-upload-zone { padding: 28px 16px; }
+            /* File row: smaller padding */
+            .file-row { padding: 10px 12px; }
+            .file-actions { opacity: 1; }
+            .folder-card-actions { opacity: 1; }
+            /* Topbar title shorten */
+            .topbar-title { max-width: calc(100vw - 140px); }
+        }
+
+        @media (max-width: 480px) {
+            .content-area { padding: 10px; }
+            .folders-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+            .folder-card { padding: 14px; }
+            .folder-card-icon-wrap { width: 38px; height: 38px; font-size: 1.1rem; }
+            .folder-card-name { font-size: 0.8125rem; }
+            .file-row { gap: 8px; padding: 9px 10px; }
+            .file-icon-wrap { width: 28px; height: 28px; font-size: 0.9rem; }
+            .file-name { font-size: 0.8125rem; }
+            .topbar-title { font-size: 0.875rem; max-width: calc(100vw - 120px); }
+            .page-title { font-size: 1.1rem; }
+            .iris-breadcrumb { font-size: 0.8125rem; flex-wrap: wrap; }
+            /* Sidebar stats compact */
+            .sidebar-stats { grid-template-columns: 1fr 1fr; }
         }
 
         /* ===== USER INFO ===== */
@@ -459,6 +526,9 @@
 </head>
 <body>
 
+<!-- Sidebar backdrop (mobile) -->
+<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
 <div class="app-layout">
 
     <!-- ===== SIDEBAR ===== -->
@@ -515,6 +585,19 @@
             <a class="sidebar-link" href="/documentation">
                 <i class="bi bi-book-fill"></i> Documentazione
             </a>
+
+            {% if user_workspaces %}
+            {% set owned = user_workspaces|selectattr('role','equalto','owner')|list %}
+            {% if owned %}
+            <div class="sidebar-section-label">Amministrazione</div>
+            {% for ws_info in owned %}
+            <a class="sidebar-link" href="/org/{{ ws_info.org.id }}/admin">
+                <i class="bi bi-shield-fill-check" style="color:var(--iris-accent);"></i>
+                Admin: <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ ws_info.org.name|truncate(18) }}</span>
+            </a>
+            {% endfor %}
+            {% endif %}
+            {% endif %}
 
             <div class="sidebar-section-label">Azioni</div>
             <button class="sidebar-link" onclick="openCreateModal()">
@@ -578,6 +661,11 @@
         {% endif %}
 
         <div class="sidebar-footer">
+            <div class="sidebar-section-label" style="padding:0;margin-bottom:6px;">Disco attivo</div>
+            <div id="diskActivePath" style="font-size:0.7rem;color:var(--iris-text-muted);word-break:break-all;margin-bottom:6px;padding:0 4px;">Caricamento…</div>
+            <button class="sidebar-link" onclick="openDiskModal()" style="margin-bottom:8px;">
+                <i class="bi bi-hdd-stack"></i> Gestisci disco
+            </button>
             <a class="sidebar-link danger" href="/logout">
                 <i class="bi bi-box-arrow-left"></i> Esci
             </a>
@@ -587,13 +675,17 @@
     <!-- ===== MAIN ===== -->
     <main class="main-content">
         <header class="topbar">
-            <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('mobile-open')">
+            <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Apri menu">
                 <i class="bi bi-list"></i>
             </button>
             <div class="topbar-title" id="topbarTitle">Dashboard <span>— Le tue cartelle</span></div>
             <div class="topbar-search">
                 <i class="bi bi-search"></i>
                 <input type="text" id="searchInput" placeholder="Cerca…" oninput="handleSearch(this.value)">
+            </div>
+            <div class="online-badge" id="onlineBadge" title="Utenti online" onclick="toggleOnlineDropdown()" style="display:none;">
+                <span class="online-dot"></span>
+                <span id="onlineCount">0</span>
             </div>
             <button class="iris-theme-toggle" onclick="toggleTheme()" title="Cambia tema">
                 <i class="bi bi-moon-stars-fill" id="theme-icon"></i>
@@ -646,6 +738,12 @@
                         <button class="btn-iris btn-iris-ghost btn-iris-sm" onclick="showDashboard()"><i class="bi bi-arrow-left"></i> Indietro</button>
                         <button class="btn-iris btn-iris-primary btn-iris-sm" onclick="document.getElementById('fileInput').click()"><i class="bi bi-upload"></i> Carica</button>
                     </div>
+                </div>
+
+                <!-- Folder real-time presence -->
+                <div class="folder-presence" id="folderPresence" style="display:none;">
+                    <i class="bi bi-people-fill"></i>
+                    <span id="folderPresenceText">0 utenti qui</span>
                 </div>
 
                 <!-- Upload zone -->
@@ -750,10 +848,64 @@
     </div>
 </div>
 
+<!-- ===== MODAL DISK SWITCHER ===== -->
+<div class="iris-modal-overlay" id="diskModal" style="display:none;" onclick="if(event.target===this)closeDiskModal()">
+    <div class="iris-modal" style="max-width:560px;" onclick="event.stopPropagation()">
+        <div class="iris-modal-header">
+            <span class="iris-modal-title"><i class="bi bi-hdd-stack me-2" style="color:var(--iris-accent);"></i>Gestisci Disco</span>
+            <button class="iris-modal-close" onclick="closeDiskModal()"><i class="bi bi-x"></i></button>
+        </div>
+
+        <div style="font-size:0.8125rem;color:var(--iris-text-muted);margin-bottom:16px;">
+            Seleziona il disco su cui salvare i file. Cambiando disco, tutti i file vengono spostati nella cartella <strong>IRIS-VE</strong> del nuovo disco.
+        </div>
+
+        <div id="diskListContainer" style="display:flex;flex-direction:column;gap:10px;">
+            <div style="text-align:center;padding:24px;color:var(--iris-text-muted);">
+                <div style="width:24px;height:24px;border:2px solid var(--iris-border);border-top-color:var(--iris-accent);border-radius:50%;animation:iris-spin 0.8s linear infinite;margin:0 auto 8px;"></div>
+                Rilevamento dischi…
+            </div>
+        </div>
+
+        <div id="diskSwitchProgress" style="display:none;margin-top:16px;">
+            <div style="font-size:0.875rem;color:var(--iris-text-secondary);margin-bottom:8px;" id="diskSwitchMsg">Spostamento file in corso…</div>
+            <div class="iris-progress"><div class="iris-progress-bar" id="diskSwitchBar" style="width:100%;animation:pulse 1s ease-in-out infinite alternate;"></div></div>
+        </div>
+    </div>
+</div>
+
 <!-- ===== TOAST CONTAINER ===== -->
 <div class="iris-toast-container" id="toastContainer"></div>
 
+<!-- ===== EXCEL MODAL ===== -->
+<div class="excel-modal-overlay" id="excelModal" style="display:none;">
+    <div class="excel-modal">
+        <div class="excel-header">
+            <div class="excel-title" id="excelTitle"><i class="bi bi-table me-2" style="color:var(--iris-success);"></i>Excel</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span class="excel-status" id="excelStatus">Sola lettura</span>
+                <button class="btn-iris btn-iris-ghost btn-iris-sm" id="excelEditBtn" onclick="toggleExcelEdit()"><i class="bi bi-pencil"></i> Modifica</button>
+                <button class="btn-iris btn-iris-primary btn-iris-sm" id="excelSaveBtn" onclick="saveExcel()" style="display:none;"><i class="bi bi-check-lg"></i> Salva</button>
+                <button class="btn-iris btn-iris-ghost btn-iris-sm" onclick="closeExcelModal()"><i class="bi bi-x-lg"></i></button>
+            </div>
+        </div>
+        <div class="excel-tabs" id="excelTabs"></div>
+        <div class="excel-body" id="excelBody">
+            <div class="excel-loading"><div class="excel-spinner"></div><span>Caricamento Excel…</span></div>
+        </div>
+        <div class="excel-footer">
+            <span class="excel-status" id="excelFooterInfo"></span>
+            <div style="display:flex;gap:8px;">
+                <button class="btn-iris btn-iris-ghost btn-iris-sm" onclick="closeExcelModal()">Chiudi</button>
+                <button class="btn-iris btn-iris-ghost btn-iris-sm" id="excelDlBtn"><i class="bi bi-download"></i> Scarica</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>
 // =====================================================================
 // THEME
@@ -771,6 +923,27 @@ function toggleTheme() {
     const icon = document.getElementById('theme-icon');
     if (icon) icon.className = saved === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
 })();
+
+// =====================================================================
+// SIDEBAR MOBILE
+// =====================================================================
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    const isOpen = sidebar.classList.contains('mobile-open');
+    if (isOpen) {
+        closeSidebar();
+    } else {
+        sidebar.classList.add('mobile-open');
+        backdrop.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('mobile-open');
+    document.getElementById('sidebarBackdrop').classList.remove('active');
+    document.body.style.overflow = '';
+}
 
 // =====================================================================
 // SECURITY: HTML ESCAPE
@@ -893,6 +1066,10 @@ function renderFolders(folders) {
     grid.innerHTML = folders.map(f => {
         const enc = f.is_encrypted;
         const icon = enc ? 'bi-folder-lock' : (f.icon || 'bi-folder-fill');
+        const dt = new Date(f.created_at);
+        const dateStr = dt.toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'numeric'});
+        const timeStr = dt.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+        const creator = f.created_by_display || f.created_by_username || '';
         return `<div class="folder-card" data-folder-id="${f.id}">
             <div class="folder-card-actions">
                 <button class="card-edit-btn" data-edit-id="${f.id}" title="Modifica"><i class="bi bi-pencil"></i></button>
@@ -907,6 +1084,10 @@ function renderFolders(folders) {
                 ${enc?'<span class="iris-badge iris-badge-accent"><i class="bi bi-lock-fill me-1"></i>Cifrata</span>':''}
             </div>
             ${f.description?`<div class="folder-card-desc">${escapeHtml(f.description)}</div>`:''}
+            <div class="folder-card-datetime">
+                <i class="bi bi-clock"></i>${dateStr} ${timeStr}
+                ${creator ? `<i class="bi bi-person ms-1"></i>${escapeHtml(creator)}` : ''}
+            </div>
         </div>`;
     }).join('');
 
@@ -930,13 +1111,14 @@ function renderFolders(folders) {
 }
 
 function showDashboard() {
+    if (currentFolderId) wsEmit('leave_folder', { folder_id: currentFolderId });
     currentFolderId = null;
     document.getElementById('dashboardView').style.display = 'block';
     document.getElementById('folderView').style.display = 'none';
     document.getElementById('uploadTriggerBtn').style.display = 'none';
+    document.getElementById('folderPresence').style.display = 'none';
     const wsLabel = activeWorkspaceName ? `— ${escapeHtml(activeWorkspaceName)}` : '— Le tue cartelle';
     document.getElementById('topbarTitle').innerHTML = `Dashboard <span>${wsLabel}</span>`;
-    // Update page title
     const ptitle = document.getElementById('pageTitle');
     if (ptitle) ptitle.textContent = activeWorkspaceName || 'Le tue cartelle';
 }
@@ -953,6 +1135,9 @@ async function openFolder(folderId, folderName) {
     const folder = allFolders.find(f => f.id === folderId);
     if (folder && folder.is_encrypted) { window.location.href = `/folder/${folderId}`; return; }
 
+    if (currentFolderId && currentFolderId !== folderId)
+        wsEmit('leave_folder', { folder_id: currentFolderId });
+
     currentFolderId = folderId;
     currentFolderName = folderName || 'Cartella';
     document.getElementById('dashboardView').style.display = 'none';
@@ -961,6 +1146,8 @@ async function openFolder(folderId, folderName) {
     document.getElementById('folderViewTitle').textContent = currentFolderName;
     document.getElementById('breadcrumbFolder').textContent = currentFolderName;
     document.getElementById('topbarTitle').innerHTML = `<a href="#" onclick="showDashboard()">Dashboard</a> <span>/ ${escapeHtml(currentFolderName)}</span>`;
+
+    wsEmit('join_folder', { folder_id: folderId });
     await loadFiles(folderId);
 }
 
@@ -996,6 +1183,11 @@ function getFileColor(t) {
     return {doc:'#3b82f6',img:'#10b981',video:'#8b5cf6',audio:'#f59e0b',archive:'#ef4444',code:'#06b6d4'}[t]||'#94a3b8';
 }
 
+function isExcelFile(name) {
+    const ext = (name||'').split('.').pop().toLowerCase();
+    return ['xlsx','xls','ods','xlsm','csv'].includes(ext);
+}
+
 function renderFiles(files) {
     document.getElementById('skeletonFiles').style.display = 'none';
     const list = document.getElementById('fileList');
@@ -1008,7 +1200,12 @@ function renderFiles(files) {
         const icon = getFileIcon(t);
         const color = getFileColor(t);
         const size = formatBytes(f.size);
-        const date = new Date(f.created_at).toLocaleDateString('it-IT');
+        const dt = new Date(f.created_at);
+        const dateStr = dt.toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'numeric'});
+        const timeStr = dt.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+        const excelBtn = isExcelFile(f.name)
+            ? `<button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="excel" title="Apri Excel" style="color:var(--iris-success);"><i class="bi bi-table"></i></button>`
+            : '';
         return `<div class="file-row" data-file-id="${f.id}">
             <div class="file-type-bar ftype-${t}"></div>
             <div class="file-icon-wrap" style="background:${color}20;">
@@ -1016,9 +1213,10 @@ function renderFiles(files) {
             </div>
             <div class="file-info">
                 <div class="file-name">${escapeHtml(f.name)}</div>
-                <div class="file-meta">${size} · ${date}</div>
+                <div class="file-meta">${size} · ${dateStr} ${timeStr}</div>
             </div>
             <div class="file-actions">
+                ${excelBtn}
                 <button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="preview" title="Anteprima"><i class="bi bi-eye"></i></button>
                 <button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="download" title="Scarica"><i class="bi bi-download"></i></button>
                 <button class="btn-iris btn-iris-danger btn-iris-icon btn-iris-sm" data-action="delete" title="Elimina"><i class="bi bi-trash3"></i></button>
@@ -1026,13 +1224,14 @@ function renderFiles(files) {
         </div>`;
     }).join('');
 
-    // Attach handlers via event delegation — no inline JS, safe for any filename
     list.querySelectorAll('.file-row').forEach(row => {
         const fid = parseInt(row.dataset.fileId, 10);
         const file = files.find(f => f.id === fid);
         row.querySelector('[data-action="preview"]').addEventListener('click', () => openPreview(fid, file ? file.name : ''));
-        row.querySelector('[data-action="download"]').addEventListener('click', () => downloadFile(fid));
+        row.querySelector('[data-action="download"]').addEventListener('click', () => downloadFile(fid, file ? file.name : `file_${fid}`));
         row.querySelector('[data-action="delete"]').addEventListener('click', () => deleteFile(fid));
+        const excelBtn = row.querySelector('[data-action="excel"]');
+        if (excelBtn) excelBtn.addEventListener('click', () => openExcelModal(fid, file ? file.name : ''));
     });
 }
 
@@ -1162,7 +1361,38 @@ async function deleteFile(fileId) {
     } catch (e) { showToast('error', 'Errore di rete', 'Controlla la connessione'); }
 }
 
-function downloadFile(fileId) { window.location.href = `/api/files/${fileId}/download`; }
+async function downloadFile(fileId, filename) {
+    const url = `/api/files/${fileId}/download`;
+    if ('showSaveFilePicker' in window) {
+        try {
+            const ext = filename && filename.includes('.') ? filename.split('.').pop() : '';
+            const handle = await window.showSaveFilePicker({
+                suggestedName: filename || `file_${fileId}`,
+                types: ext ? [{ description: 'File', accept: { '*/*': [`.${ext}`] } }] : undefined
+            });
+            showToast('info', 'Download in corso…', escapeHtml(filename || ''));
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('Download fallito');
+            const blob = await res.blob();
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            showToast('success', 'File salvato!', escapeHtml(filename || ''));
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            // Fallback for browsers that reject the API (non-HTTPS, Firefox, etc.)
+            _triggerAnchorDownload(url, filename);
+        }
+    } else {
+        _triggerAnchorDownload(url, filename);
+    }
+}
+function _triggerAnchorDownload(url, filename) {
+    showToast('info', 'Download avviato', escapeHtml(filename || ''));
+    const a = document.createElement('a');
+    a.href = url; a.download = filename || '';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
 
 // =====================================================================
 // UPLOAD
@@ -1271,11 +1501,112 @@ function formatBytes(bytes) {
     return `${bytes.toFixed(1)} ${u[i]}`;
 }
 
+// =====================================================================
+// DISK MANAGEMENT
+// =====================================================================
+async function openDiskModal() {
+    document.getElementById('diskModal').style.display = 'flex';
+    await refreshDiskList();
+}
+function closeDiskModal() {
+    document.getElementById('diskModal').style.display = 'none';
+}
+
+async function refreshDiskList() {
+    const container = document.getElementById('diskListContainer');
+    container.innerHTML = `<div style="text-align:center;padding:24px;color:var(--iris-text-muted);">
+        <div style="width:24px;height:24px;border:2px solid var(--iris-border);border-top-color:var(--iris-accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 8px;"></div>
+        Rilevamento dischi…</div>`;
+    try {
+        const r = await fetch('/api/disks');
+        const d = await r.json();
+        if (!d.psutil_available) {
+            container.innerHTML = `<div style="padding:16px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.25);border-radius:var(--iris-radius-md);font-size:0.875rem;color:var(--iris-warning);">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>psutil non installato — esegui <code>pip install psutil</code> per rilevare i dischi.
+            </div>`;
+            return;
+        }
+        if (!d.disks?.length) {
+            container.innerHTML = `<div style="text-align:center;padding:24px;color:var(--iris-text-muted);">Nessun disco rilevato</div>`;
+            return;
+        }
+        document.getElementById('diskActivePath').textContent = d.active_path || '—';
+        container.innerHTML = d.disks.map(disk => {
+            const pct = disk.percent;
+            const barColor = pct > 90 ? 'danger' : pct > 70 ? 'warning' : '';
+            return `<div style="background:var(--iris-bg-card);border:1px solid ${disk.is_active ? 'rgba(99,102,241,0.4)' : 'var(--iris-border)'};border-radius:var(--iris-radius-md);padding:14px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;flex-wrap:wrap;">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <i class="bi bi-hdd-fill" style="font-size:1.25rem;color:${disk.is_active ? 'var(--iris-accent)' : 'var(--iris-text-muted)'};"></i>
+                        <div>
+                            <div style="font-weight:700;color:var(--iris-text-primary);font-size:0.9375rem;">${escapeHtml(disk.device)}</div>
+                            <div style="font-size:0.75rem;color:var(--iris-text-muted);">${escapeHtml(disk.mountpoint)} · ${escapeHtml(disk.fstype)}</div>
+                        </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        ${disk.is_active
+                            ? `<span class="iris-badge iris-badge-accent"><i class="bi bi-check-circle-fill me-1"></i>Attivo</span>`
+                            : `<button class="btn-iris btn-iris-primary btn-iris-sm" onclick="switchDisk('${escapeHtml(disk.mountpoint)}')">
+                                <i class="bi bi-arrow-repeat"></i> Usa questo
+                               </button>`}
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--iris-text-muted);margin-bottom:5px;">
+                    <span><i class="bi bi-hdd me-1"></i>${disk.used_human} usati di ${disk.total_human}</span>
+                    <span>${pct}%</span>
+                </div>
+                <div class="iris-progress">
+                    <div class="iris-progress-bar ${barColor}" style="width:${pct}%"></div>
+                </div>
+                <div style="font-size:0.7rem;color:var(--iris-text-muted);margin-top:5px;">
+                    <i class="bi bi-folder-fill me-1"></i>Cartella: ${escapeHtml(disk.iris_path)}
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        container.innerHTML = `<div style="padding:14px;color:var(--iris-danger);">Errore: ${escapeHtml(e.message)}</div>`;
+    }
+}
+
+async function switchDisk(mountpoint) {
+    if (!confirm(`Spostare tutti i file (${document.getElementById('statFiles').textContent || '?'}) nella cartella IRIS-VE su "${mountpoint}"?\n\nL'operazione può richiedere alcuni minuti.`)) return;
+    const progress = document.getElementById('diskSwitchProgress');
+    const msg = document.getElementById('diskSwitchMsg');
+    progress.style.display = 'block';
+    msg.textContent = 'Spostamento file in corso…';
+    // Disable buttons during switch
+    document.querySelectorAll('#diskListContainer button').forEach(b => b.disabled = true);
+    try {
+        const r = await fetch('/api/disks/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mountpoint })
+        });
+        const d = await r.json();
+        progress.style.display = 'none';
+        if (d.success) {
+            showToast('success', 'Disco cambiato', d.message);
+            if (d.errors?.length) showToast('warning', `${d.errors.length} errori`, d.errors[0]);
+            await refreshDiskList();
+            loadDiskInfo();
+        } else {
+            showToast('error', 'Errore cambio disco', d.message);
+            document.querySelectorAll('#diskListContainer button').forEach(b => b.disabled = false);
+        }
+    } catch(e) {
+        progress.style.display = 'none';
+        showToast('error', 'Errore di rete', e.message);
+        document.querySelectorAll('#diskListContainer button').forEach(b => b.disabled = false);
+    }
+}
+
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
         closeModal();
         closeEditModal();
         closePreview();
+        closeDiskModal();
+        closeSidebar();
     }
     if (e.key === 'Enter' && document.getElementById('createModal').style.display !== 'none') createFolder();
     if (e.key === 'Enter' && document.getElementById('editModal').style.display !== 'none') saveEditFolder();
@@ -1345,6 +1676,245 @@ function closePreview() {
     document.getElementById('previewOverlay').classList.remove('open');
     document.body.style.overflow = '';
 }
+
+// =====================================================================
+// WEBSOCKET — Socket.IO
+// =====================================================================
+let _socket = null;
+
+function wsConnect() {
+    try {
+        _socket = io({ transports: ['websocket', 'polling'] });
+        _socket.on('connect', () => {
+            document.getElementById('onlineBadge').style.display = 'flex';
+        });
+        _socket.on('disconnect', () => {
+            document.getElementById('onlineBadge').style.display = 'none';
+        });
+        _socket.on('users_online', (users) => {
+            const count = Array.isArray(users) ? users.length : 0;
+            document.getElementById('onlineCount').textContent = count + ' online';
+            document.getElementById('onlineBadge').style.display = count > 0 ? 'flex' : 'none';
+        });
+        _socket.on('folder_presence', (data) => {
+            if (!currentFolderId || data.folder_id !== currentFolderId) return;
+            const users = data.users || [];
+            const el = document.getElementById('folderPresence');
+            const txt = document.getElementById('folderPresenceText');
+            if (users.length > 0) {
+                el.style.display = 'flex';
+                const names = users.map(u => escapeHtml(u.full_name || u.username)).join(', ');
+                txt.textContent = `${users.length} ${users.length === 1 ? 'utente qui' : 'utenti qui'}: ${names}`;
+            } else {
+                el.style.display = 'none';
+            }
+        });
+        _socket.on('folder_created', (folder) => {
+            if (!currentFolderId) {
+                // Only refresh dashboard if on the right workspace
+                const wsId = folder.workspace_id || null;
+                const curWsId = typeof activeWorkspaceId !== 'undefined' ? activeWorkspaceId : null;
+                if (String(wsId) === String(curWsId)) {
+                    allFolders.push(folder);
+                    renderFolders(allFolders);
+                    showToast('info', 'Nuova cartella', escapeHtml(folder.name));
+                }
+            }
+        });
+        _socket.on('folder_deleted', (data) => {
+            if (!currentFolderId) {
+                allFolders = allFolders.filter(f => f.id !== data.folder_id);
+                renderFolders(allFolders);
+            }
+        });
+        _socket.on('file_uploaded', (data) => {
+            if (currentFolderId && data.folder_id === currentFolderId) {
+                const exists = allFiles.find(f => f.id === data.file.id);
+                if (!exists) {
+                    allFiles.push(data.file);
+                    renderFiles(allFiles);
+                    showToast('info', 'Nuovo file', escapeHtml(data.file.name));
+                }
+            }
+        });
+        _socket.on('file_deleted', (data) => {
+            if (currentFolderId && data.folder_id === currentFolderId) {
+                allFiles = allFiles.filter(f => f.id !== data.file_id);
+                renderFiles(allFiles);
+            }
+        });
+        _socket.on('file_updated', (data) => {
+            if (currentFolderId && data.folder_id === currentFolderId) {
+                const idx = allFiles.findIndex(f => f.id === data.file.id);
+                if (idx !== -1) { allFiles[idx] = data.file; renderFiles(allFiles); }
+            }
+        });
+    } catch(e) { console.warn('Socket.IO not available:', e.message); }
+}
+
+function wsEmit(event, data) {
+    if (_socket && _socket.connected) _socket.emit(event, data);
+}
+
+function toggleOnlineDropdown() { /* minimal: just show toast */ }
+
+// =====================================================================
+// EXCEL VIEWER / EDITOR (SheetJS)
+// =====================================================================
+let _excelWb = null;
+let _excelFileId = null;
+let _excelFilename = null;
+let _excelActiveSheet = null;
+let _excelModified = false;
+let _excelEditMode = false;
+
+async function openExcelModal(fileId, filename) {
+    _excelFileId = fileId;
+    _excelFilename = filename;
+    _excelModified = false;
+    _excelEditMode = false;
+    document.getElementById('excelTitle').innerHTML = `<i class="bi bi-table me-2" style="color:var(--iris-success);"></i>${escapeHtml(filename)}`;
+    document.getElementById('excelEditBtn').style.display = '';
+    document.getElementById('excelSaveBtn').style.display = 'none';
+    document.getElementById('excelStatus').textContent = 'Sola lettura';
+    document.getElementById('excelStatus').className = 'excel-status';
+    document.getElementById('excelFooterInfo').textContent = '';
+    document.getElementById('excelTabs').innerHTML = '';
+    document.getElementById('excelBody').innerHTML = '<div class="excel-loading"><div class="excel-spinner"></div><span>Caricamento Excel…</span></div>';
+    document.getElementById('excelDlBtn').onclick = () => downloadFile(fileId, filename);
+    document.getElementById('excelModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    try {
+        const resp = await fetch(`/api/files/${fileId}/preview-inline`);
+        if (!resp.ok) throw new Error('Errore caricamento file');
+        const buffer = await resp.arrayBuffer();
+        _excelWb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+        _excelActiveSheet = _excelWb.SheetNames[0];
+        renderExcelTabs();
+        renderExcelSheet(_excelActiveSheet);
+    } catch(e) {
+        document.getElementById('excelBody').innerHTML = `<div class="excel-loading" style="color:var(--iris-danger);"><i class="bi bi-x-circle" style="font-size:2rem;"></i><span>Errore: ${escapeHtml(e.message)}</span></div>`;
+    }
+}
+
+function closeExcelModal() {
+    if (_excelModified && !confirm('Ci sono modifiche non salvate. Chiudere senza salvare?')) return;
+    document.getElementById('excelModal').style.display = 'none';
+    document.body.style.overflow = '';
+    _excelWb = null; _excelFileId = null; _excelModified = false;
+}
+
+function renderExcelTabs() {
+    const tabs = document.getElementById('excelTabs');
+    tabs.innerHTML = _excelWb.SheetNames.map(name =>
+        `<button class="excel-tab ${name === _excelActiveSheet ? 'active' : ''}" onclick="switchExcelSheet('${escapeHtml(name)}')">${escapeHtml(name)}</button>`
+    ).join('');
+}
+
+function switchExcelSheet(name) {
+    _excelActiveSheet = name;
+    renderExcelTabs();
+    renderExcelSheet(name);
+}
+
+function renderExcelSheet(sheetName) {
+    const ws = _excelWb.Sheets[sheetName];
+    if (!ws) return;
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    const rows = range.e.r - range.s.r + 1;
+    const cols = range.e.c - range.s.c + 1;
+
+    // Column headers (A, B, C...)
+    let thead = '<tr><th class="row-header"></th>';
+    for (let c = 0; c < cols; c++) {
+        thead += `<th>${XLSX.utils.encode_col(range.s.c + c)}</th>`;
+    }
+    thead += '</tr>';
+
+    let tbody = '';
+    for (let r = 0; r < rows; r++) {
+        tbody += `<tr><td class="row-header">${range.s.r + r + 1}</td>`;
+        for (let c = 0; c < cols; c++) {
+            const addr = XLSX.utils.encode_cell({ r: range.s.r + r, c: range.s.c + c });
+            const cell = ws[addr];
+            const val = cell ? (cell.v !== undefined ? cell.v : '') : '';
+            const displayVal = val === null || val === undefined ? '' : String(val);
+            tbody += `<td><input class="excel-cell" data-addr="${addr}" value="${escapeHtml(displayVal)}"
+                ${_excelEditMode ? '' : 'readonly'} oninput="onExcelCellChange(this, '${addr}')"></td>`;
+        }
+        tbody += '</tr>';
+    }
+
+    document.getElementById('excelBody').innerHTML = `<div class="excel-table-wrap"><table class="excel-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table></div>`;
+    document.getElementById('excelFooterInfo').textContent = `${rows} righe × ${cols} colonne`;
+}
+
+function onExcelCellChange(input, addr) {
+    if (!_excelWb || !_excelActiveSheet) return;
+    const ws = _excelWb.Sheets[_excelActiveSheet];
+    if (!ws[addr]) ws[addr] = {};
+    ws[addr].v = input.value;
+    ws[addr].t = 's';
+    _excelModified = true;
+    document.getElementById('excelStatus').textContent = '● Non salvato';
+    document.getElementById('excelStatus').className = 'excel-status modified';
+}
+
+function toggleExcelEdit() {
+    _excelEditMode = !_excelEditMode;
+    const btn = document.getElementById('excelEditBtn');
+    const saveBtn = document.getElementById('excelSaveBtn');
+    const status = document.getElementById('excelStatus');
+    btn.innerHTML = _excelEditMode ? '<i class="bi bi-eye"></i> Solo lettura' : '<i class="bi bi-pencil"></i> Modifica';
+    saveBtn.style.display = _excelEditMode ? '' : 'none';
+    if (!_excelEditMode) {
+        status.textContent = 'Sola lettura';
+        status.className = 'excel-status';
+    } else {
+        status.textContent = 'Modalità modifica';
+        status.className = 'excel-status modified';
+    }
+    // Re-render with edit mode
+    if (_excelWb) renderExcelSheet(_excelActiveSheet);
+}
+
+async function saveExcel() {
+    if (!_excelWb || !_excelFileId) return;
+    try {
+        document.getElementById('excelSaveBtn').disabled = true;
+        document.getElementById('excelSaveBtn').innerHTML = '<i class="bi bi-hourglass-split"></i> Salvataggio…';
+        const b64 = XLSX.write(_excelWb, { bookType: 'xlsx', type: 'base64' });
+        const r = await fetch(`/api/files/${_excelFileId}/excel-save`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: b64 })
+        });
+        const d = await r.json();
+        if (d.success) {
+            _excelModified = false;
+            showToast('success', 'Excel salvato', escapeHtml(_excelFilename || ''));
+            document.getElementById('excelStatus').textContent = 'Salvato ✓';
+            document.getElementById('excelStatus').className = 'excel-status';
+        } else {
+            showToast('error', 'Errore salvataggio', d.message);
+        }
+    } catch(e) { showToast('error', 'Errore', e.message); }
+    finally {
+        document.getElementById('excelSaveBtn').disabled = false;
+        document.getElementById('excelSaveBtn').innerHTML = '<i class="bi bi-check-lg"></i> Salva';
+    }
+}
+
+// =====================================================================
+// INIT
+// =====================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    wsConnect();
+});
+window.addEventListener('beforeunload', () => {
+    if (currentFolderId) wsEmit('leave_folder', { folder_id: currentFolderId });
+});
 </script>
 
 <!-- Preview modal -->

@@ -1,7 +1,7 @@
 -- ============================================================================
--- IRIS-VE v3.0 Database Setup Script
--- Multi-user Cloud Storage with Organizations & Workspaces
--- Versione: 3.0.0 — Data: 2026-03-24
+-- IRIS-VE v3.1 Database Setup Script
+-- Multi-user Cloud Storage with Organizations, Workspaces, Custom Roles & Multi-disk
+-- Versione: 3.1.0 — Data: 2026-03-24
 -- ============================================================================
 
 -- Creazione database (se non esiste)
@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(80) NOT NULL UNIQUE,
     email VARCHAR(120) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
+    -- v3.2: dati personali opzionali
+    first_name VARCHAR(100) NULL DEFAULT NULL,
+    last_name VARCHAR(100) NULL DEFAULT NULL,
+    phone VARCHAR(20) NULL DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -58,13 +62,42 @@ CREATE TABLE IF NOT EXISTS organization_members (
     organization_id INT NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'member',  -- 'owner' | 'member'
     joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- v3.1: ruolo personalizzato e permessi manuali
+    custom_role_id INT NULL DEFAULT NULL,
+    permissions_override JSON NULL DEFAULT NULL,
 
     UNIQUE KEY uq_user_org (user_id, organization_id),
     INDEX ix_org_members_user (user_id),
     INDEX ix_org_members_org (organization_id),
     CONSTRAINT fk_om_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_om_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+    -- fk_members_role aggiunto dopo org_roles (vedi sotto)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- TABELLE RUOLI PERSONALIZZATI (v3.1)
+-- ============================================================================
+
+-- Ruoli personalizzati per organizzazione con permessi granulari
+CREATE TABLE IF NOT EXISTS org_roles (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    permissions JSON NOT NULL,
+    color VARCHAR(20) NOT NULL DEFAULT 'accent',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uq_org_role_name (organization_id, name),
+    INDEX ix_org_roles_org (organization_id),
+    CONSTRAINT fk_org_roles_org FOREIGN KEY (organization_id)
+        REFERENCES organizations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Aggiunge FK custom_role_id ora che org_roles esiste
+ALTER TABLE organization_members
+    ADD CONSTRAINT fk_members_role
+    FOREIGN KEY (custom_role_id) REFERENCES org_roles(id) ON DELETE SET NULL;
 
 -- Tabella workspace (uno per organizzazione — auto-creato alla creazione org)
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -74,6 +107,17 @@ CREATE TABLE IF NOT EXISTS workspaces (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_ws_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- CONFIGURAZIONE STORAGE MULTI-DISCO (v3.1)
+-- ============================================================================
+
+-- Configurazione disco attivo (riga singola — aggiornata al cambio disco)
+CREATE TABLE IF NOT EXISTS storage_config (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    active_disk_path VARCHAR(512) NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -289,9 +333,9 @@ WHERE TABLE_SCHEMA = DATABASE()
 ORDER BY TABLE_NAME;
 
 SELECT
-    'Database IRIS-VE v3.0 configurato con successo!' AS message,
+    'Database IRIS-VE v3.1 configurato con successo!' AS message,
     NOW() AS timestamp,
     DATABASE() AS current_database,
     @@version AS mysql_version;
 
-SELECT '✅ Installazione IRIS-VE v3.0 completata!' AS final_status;
+SELECT '✅ Installazione IRIS-VE v3.1 completata!' AS final_status;

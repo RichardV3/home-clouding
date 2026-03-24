@@ -7,6 +7,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_caching import Cache
+from flask_socketio import SocketIO, emit as sio_emit, join_room, leave_room
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -21,6 +22,7 @@ from logging.handlers import RotatingFileHandler
 import hashlib
 import zipfile
 import shutil
+import json
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -30,6 +32,11 @@ import random
 import string
 import secrets
 from dotenv import load_dotenv
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
 
 # Load .env / env file before reading any os.environ variables
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), 'env'))
@@ -75,6 +82,20 @@ BACKUP_FOLDER = os.path.join(os.path.dirname(__file__), 'backups')
 LOG_FOLDER = os.path.join(os.path.dirname(__file__), 'logs')
 STATIC_FOLDER = os.path.join(os.path.dirname(__file__), 'static')
 
+# Disk & permissions constants
+DISK_FOLDER_NAME = 'IRIS-VE'
+
+ALL_PERMISSIONS = [
+    ('upload_files',    'Caricare file'),
+    ('delete_files',    'Eliminare file'),
+    ('create_folders',  'Creare cartelle'),
+    ('delete_folders',  'Eliminare cartelle'),
+    ('view_encrypted',  'Aprire cartelle cifrate'),
+    ('view_analytics',  'Vedere le statistiche'),
+]
+ALL_PERMISSION_KEYS  = [p[0] for p in ALL_PERMISSIONS]
+DEFAULT_MEMBER_PERMS = ['upload_files', 'create_folders', 'view_analytics']
+
 # Cache
 app.config['CACHE_TYPE'] = 'simple'
 app.config['CACHE_DEFAULT_TIMEOUT'] = 300
@@ -97,6 +118,11 @@ db = SQLAlchemy(app)
 cache = Cache(app)
 limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
 limiter.init_app(app)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading',
+                    logger=False, engineio_logger=False)
+
+# In-memory presence tracking: {sid: {user_id, username, full_name, folder_id, connected_at}}
+online_users: dict = {}
 
 # ============================================================================
 # LOGGING
@@ -133,6 +159,9 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    first_name = db.Column(db.String(100), nullable=True)
+    last_name = db.Column(db.String(100), nullable=True)
+    phone = db.Column(db.String(20), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -148,11 +177,20 @@ class User(db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+    @property
+    def full_name(self):
+        n = f"{self.first_name or ''} {self.last_name or ''}".strip()
+        return n or self.username
+
     def to_dict(self):
         return {
             'id': self.id,
             'username': self.username,
             'email': self.email,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'phone': self.phone,
+            'full_name': self.full_name,
             'created_at': self.created_at.isoformat()
         }
 
@@ -204,14 +242,57 @@ class OrganizationMember(db.Model):
     organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='member')  # 'owner' or 'member'
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Custom role & permissions (v3.1)
+    custom_role_id = db.Column(db.Integer, db.ForeignKey('org_roles.id', ondelete='SET NULL'), nullable=True)
+    permissions_override = db.Column(db.JSON, nullable=True)
+
+    custom_role = db.relationship('OrgRole', foreign_keys=[custom_role_id])
 
     def to_dict(self):
         return {
             'user_id': self.user_id,
             'organization_id': self.organization_id,
             'role': self.role,
-            'joined_at': self.joined_at.isoformat()
+            'joined_at': self.joined_at.isoformat(),
+            'custom_role_id': self.custom_role_id,
+            'permissions_override': self.permissions_override,
         }
+
+
+class OrgRole(db.Model):
+    """Custom roles per organization with granular permissions."""
+    __tablename__ = 'org_roles'
+    __table_args__ = (
+        db.UniqueConstraint('organization_id', 'name', name='uq_org_role_name'),
+        db.Index('ix_org_roles_org', 'organization_id'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id', ondelete='CASCADE'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    permissions = db.Column(db.JSON, nullable=False, default=list)
+    color = db.Column(db.String(20), nullable=True, default='accent')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'organization_id': self.organization_id,
+            'name': self.name,
+            'permissions': self.permissions or [],
+            'color': self.color or 'accent',
+            'created_at': self.created_at.isoformat(),
+        }
+
+
+class StorageConfig(db.Model):
+    """Single-row table storing the active disk upload path."""
+    __tablename__ = 'storage_config'
+
+    id = db.Column(db.Integer, primary_key=True)
+    active_disk_path = db.Column(db.String(512), nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class Workspace(db.Model):
@@ -465,11 +546,70 @@ def allowed_file(_filename):
 
 
 def sanitize_name(name: str, max_len: int = 255) -> str:
-    """Sanitize folder/file names: strip whitespace and limit length.
-    XSS prevention is handled by Jinja2 auto-escaping (server-side)
-    and escapeHtml() (client-side) — do NOT store HTML entities in the DB.
-    """
+    """Sanitize folder/file names: strip whitespace and limit length."""
     return name.strip()[:max_len]
+
+
+# ============================================================================
+# DISK MANAGEMENT UTILITIES
+# ============================================================================
+
+def get_upload_folder() -> str:
+    """Return current active upload path (reads StorageConfig from DB; falls back to default)."""
+    try:
+        config = StorageConfig.query.first()
+        if config and config.active_disk_path and os.path.isdir(config.active_disk_path):
+            return config.active_disk_path
+    except Exception:
+        pass
+    return UPLOAD_FOLDER
+
+
+def list_available_disks() -> list:
+    """List disk partitions with usage stats. Requires psutil."""
+    if not PSUTIL_AVAILABLE:
+        return []
+    active = get_upload_folder()
+    disks = []
+    for part in psutil.disk_partitions(all=False):
+        try:
+            usage = psutil.disk_usage(part.mountpoint)
+            iris_path = os.path.join(part.mountpoint, DISK_FOLDER_NAME)
+            # Determine if this disk contains the active upload folder
+            try:
+                is_active = os.path.commonpath(
+                    [os.path.abspath(active), os.path.abspath(part.mountpoint)]
+                ) == os.path.abspath(part.mountpoint)
+            except ValueError:
+                is_active = False
+            disks.append({
+                'device': part.device,
+                'mountpoint': part.mountpoint,
+                'fstype': part.fstype,
+                'total': usage.total,
+                'used': usage.used,
+                'free': usage.free,
+                'percent': round(usage.percent, 1),
+                'total_human': format_bytes(usage.total),
+                'used_human': format_bytes(usage.used),
+                'free_human': format_bytes(usage.free),
+                'is_active': is_active,
+                'iris_path': iris_path,
+            })
+        except (PermissionError, OSError):
+            continue
+    return disks
+
+
+def _get_effective_permissions(member: 'OrganizationMember') -> list:
+    """Return effective permission keys for a member."""
+    if member.role == 'owner':
+        return ALL_PERMISSION_KEYS[:]
+    if member.permissions_override:
+        return [p for p in member.permissions_override if p in ALL_PERMISSION_KEYS]
+    if member.custom_role_id and member.custom_role:
+        return [p for p in (member.custom_role.permissions or []) if p in ALL_PERMISSION_KEYS]
+    return DEFAULT_MEMBER_PERMS[:]
 
 
 def encrypt_data(data, password):
@@ -596,6 +736,9 @@ def register():
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password', '')
+        first_name = request.form.get('first_name', '').strip()
+        last_name = request.form.get('last_name', '').strip()
+        user_phone = request.form.get('phone', '').strip()
         has_org = request.form.get('has_org') == 'yes'
         org_exists = request.form.get('org_exists') == 'yes'
         invite_code = request.form.get('invite_code', '').strip().upper()
@@ -638,7 +781,10 @@ def register():
             return render_template('register.html', errors=errors, form_data=request.form)
 
         try:
-            user = User(username=username, email=email)
+            user = User(username=username, email=email,
+                        first_name=first_name or None,
+                        last_name=last_name or None,
+                        phone=user_phone[:20] if user_phone else None)
             user.set_password(password)
             db.session.add(user)
             db.session.flush()
@@ -823,15 +969,22 @@ def api_get_folders():
 
         results = db.session.query(
             Folder,
-            func.count(File.id).label('files_count')
-        ).outerjoin(File, File.folder_id == Folder.id).filter(
-            folder_filter
-        ).group_by(Folder.id).all()
+            func.count(File.id).label('files_count'),
+            User.username.label('creator_username'),
+            User.first_name.label('creator_first_name'),
+            User.last_name.label('creator_last_name'),
+        ).outerjoin(File, File.folder_id == Folder.id
+        ).outerjoin(User, User.id == Folder.created_by_id
+        ).filter(folder_filter
+        ).group_by(Folder.id, User.username, User.first_name, User.last_name).all()
 
         folders_data = []
-        for folder, count in results:
+        for folder, count, c_user, c_fn, c_ln in results:
             d = folder.to_dict_base()
             d['files_count'] = count
+            full = f"{c_fn or ''} {c_ln or ''}".strip()
+            d['created_by_username'] = c_user or 'Sistema'
+            d['created_by_display'] = full or c_user or 'Sistema'
             folders_data.append(d)
         return jsonify(folders_data)
     except Exception as e:
@@ -887,6 +1040,9 @@ def api_create_folder():
         # Newly created folder always has 0 files — no subquery needed
         d = folder.to_dict_base()
         d['files_count'] = 0
+        d['created_by_username'] = user.username
+        d['created_by_display'] = user.full_name
+        socketio.emit('folder_created', d)
         return jsonify({'success': True, 'folder': d}), 201
     except Exception as e:
         db.session.rollback()
@@ -942,7 +1098,7 @@ def api_delete_folder(folder_id):
 
         # Collect paths BEFORE deleting anything
         disk_paths = [
-            os.path.join(UPLOAD_FOLDER, f.file_path)
+            os.path.join(get_upload_folder(), f.file_path)
             for f in folder.files
         ]
 
@@ -960,7 +1116,7 @@ def api_delete_folder(folder_id):
 
         cache.delete('all_folders')
         log_action('delete_folder', 'folder', folder_id, f'Deleted: {folder_name}')
-
+        socketio.emit('folder_deleted', {'folder_id': folder_id})
         return jsonify({'success': True, 'message': 'Cartella eliminata'})
     except Exception as e:
         db.session.rollback()
@@ -1017,8 +1173,10 @@ def api_upload_file(folder_id):
         file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'bin'
         file_path = f"{file_hash}.{file_ext}"
 
-        # Save file
-        full_path = os.path.join(UPLOAD_FOLDER, file_path)
+        # Save file to active disk
+        upload_dir = get_upload_folder()
+        os.makedirs(upload_dir, exist_ok=True)
+        full_path = os.path.join(upload_dir, file_path)
         try:
             file.save(full_path)
             file_size = os.path.getsize(full_path)
@@ -1043,7 +1201,8 @@ def api_upload_file(folder_id):
         cache.delete('all_folders')
         log_action('upload_file', 'file', db_file.id, f'Uploaded: {filename} ({file_size} bytes)')
         logger.info(f"✅ File uploaded successfully: {filename} -> {file_path} ({file_size} bytes)")
-
+        socketio.emit('file_uploaded', {'folder_id': folder_id, 'file': db_file.to_dict()},
+                      room=f'folder_{folder_id}')
         return jsonify({'success': True, 'file': db_file.to_dict()}), 201
 
     except Exception as e:
@@ -1059,7 +1218,7 @@ def api_download_file(file_id):
     """Download file"""
     try:
         file = File.query.get_or_404(file_id)
-        file_path = os.path.join(UPLOAD_FOLDER, file.file_path)
+        file_path = os.path.join(get_upload_folder(), file.file_path)
 
         if not os.path.exists(file_path):
             logger.error(f"Download error: File not found at {file_path}")
@@ -1085,8 +1244,9 @@ def api_delete_file(file_id):
     """Delete file"""
     try:
         file = File.query.get_or_404(file_id)
-        file_path = os.path.join(UPLOAD_FOLDER, file.file_path)
+        file_path = os.path.join(get_upload_folder(), file.file_path)
         file_name = file.original_name
+        file_folder_id = file.folder_id   # save before delete
 
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -1097,7 +1257,8 @@ def api_delete_file(file_id):
 
         cache.delete('all_folders')
         log_action('delete_file', 'file', file_id, f'Deleted: {file_name}')
-
+        socketio.emit('file_deleted', {'folder_id': file_folder_id, 'file_id': file_id},
+                      room=f'folder_{file_folder_id}')
         return jsonify({'success': True, 'message': 'File eliminato'})
     except Exception as e:
         db.session.rollback()
@@ -1111,7 +1272,7 @@ def api_file_preview(file_id):
     """Return preview data for a file (text, image url, zip listing)"""
     try:
         file = File.query.get_or_404(file_id)
-        file_path = os.path.join(UPLOAD_FOLDER, file.file_path)
+        file_path = os.path.join(get_upload_folder(), file.file_path)
         filename = file.original_name or file.name
         ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
 
@@ -1161,7 +1322,7 @@ def api_file_preview_inline(file_id):
     """Serve file inline for image preview with correct MIME type"""
     try:
         file = File.query.get_or_404(file_id)
-        file_path = os.path.join(UPLOAD_FOLDER, file.file_path)
+        file_path = os.path.join(get_upload_folder(), file.file_path)
         if not os.path.exists(file_path):
             return jsonify({'success': False, 'message': 'File non trovato'}), 404
         return send_file(
@@ -1181,7 +1342,7 @@ def api_zip_extract(file_id):
     """Extract and download a single file from a ZIP archive"""
     try:
         file = File.query.get_or_404(file_id)
-        file_path = os.path.join(UPLOAD_FOLDER, file.file_path)
+        file_path = os.path.join(get_upload_folder(), file.file_path)
         filename = file.original_name or file.name
         ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
 
@@ -1477,6 +1638,567 @@ def api_network_info():
 
 
 # ============================================================================
+# DISK MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@app.route('/api/disks', methods=['GET'])
+@api_login_required
+def api_get_disks():
+    """List available disks with usage stats and active indicator."""
+    try:
+        disks = list_available_disks()
+        if not disks and not PSUTIL_AVAILABLE:
+            return jsonify({'success': False, 'message': 'psutil non installato', 'disks': []}), 200
+        active = get_upload_folder()
+        total_files = File.query.count()
+        return jsonify({
+            'success': True,
+            'disks': disks,
+            'active_path': active,
+            'total_files': total_files,
+            'psutil_available': PSUTIL_AVAILABLE,
+        })
+    except Exception as e:
+        logger.error(f"Get disks error: {e}")
+        return jsonify({'success': False, 'message': 'Errore lettura dischi'}), 500
+
+
+@app.route('/api/disks/switch', methods=['POST'])
+@api_login_required
+@limiter.limit("5 per minute")
+def api_switch_disk():
+    """Switch active upload disk — moves all files to <new_mountpoint>/IRIS-VE/."""
+    try:
+        if not PSUTIL_AVAILABLE:
+            return jsonify({'success': False, 'message': 'psutil non disponibile'}), 503
+
+        data = request.get_json()
+        mountpoint = data.get('mountpoint', '').strip()
+        if not mountpoint:
+            return jsonify({'success': False, 'message': 'Mountpoint non fornito'}), 400
+
+        # Security: must be a real disk partition
+        valid_mounts = [p.mountpoint for p in psutil.disk_partitions(all=False)]
+        if not any(
+            os.path.normpath(mountpoint) == os.path.normpath(m)
+            for m in valid_mounts
+        ):
+            return jsonify({'success': False, 'message': 'Mountpoint non valido'}), 400
+
+        current_path = get_upload_folder()
+        iris_path = os.path.join(mountpoint, DISK_FOLDER_NAME)
+
+        if os.path.normpath(iris_path) == os.path.normpath(current_path):
+            return jsonify({'success': False, 'message': 'Disco già attivo'}), 400
+
+        os.makedirs(iris_path, exist_ok=True)
+
+        # Move files
+        files = File.query.all()
+        moved, errors = 0, []
+        for f in files:
+            src = os.path.join(current_path, f.file_path)
+            dst = os.path.join(iris_path, f.file_path)
+            if os.path.exists(src):
+                try:
+                    shutil.move(src, dst)
+                    moved += 1
+                except Exception as ex:
+                    errors.append(f"{f.original_name or f.name}: {ex}")
+
+        # Persist new path
+        config = StorageConfig.query.first()
+        if config:
+            config.active_disk_path = iris_path
+        else:
+            config = StorageConfig(active_disk_path=iris_path)
+            db.session.add(config)
+        db.session.commit()
+
+        # Update global for this process
+        global UPLOAD_FOLDER
+        UPLOAD_FOLDER = iris_path
+
+        log_action('switch_disk', details=f'Switched to: {iris_path}, moved: {moved} files')
+        return jsonify({
+            'success': True,
+            'message': f'Disco cambiato: {moved} file spostati in {iris_path}',
+            'new_path': iris_path,
+            'moved': moved,
+            'errors': errors[:10],
+        })
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Switch disk error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============================================================================
+# ORGANIZATION ADMIN ROUTES & ENDPOINTS
+# ============================================================================
+
+@app.route('/org/<int:org_id>/admin')
+@login_required
+def org_admin(org_id):
+    """Org admin dashboard — owner only."""
+    try:
+        user = get_current_user()
+        org = Organization.query.get_or_404(org_id)
+        member = OrganizationMember.query.filter_by(
+            user_id=user.id, organization_id=org_id
+        ).first()
+        if not member or member.role != 'owner':
+            return render_template('404.html'), 404
+
+        memberships = OrganizationMember.query.filter_by(user_id=user.id).all()
+        user_workspaces = []
+        for m in memberships:
+            o = m.organization
+            if o.workspace:
+                user_workspaces.append({'workspace': o.workspace, 'org': o, 'role': m.role})
+
+        return render_template(
+            'org_admin.html',
+            org=org,
+            user=user,
+            user_workspaces=user_workspaces,
+            all_permissions=ALL_PERMISSIONS,
+        )
+    except Exception as e:
+        logger.error(f"Org admin error: {e}")
+        return render_template('500.html'), 500
+
+
+@app.route('/api/orgs/<int:org_id>/stats', methods=['GET'])
+@api_login_required
+def api_get_org_stats(org_id):
+    """Org statistics — owner only."""
+    try:
+        from sqlalchemy import func
+        user = get_current_user()
+        member = OrganizationMember.query.filter_by(
+            user_id=user.id, organization_id=org_id
+        ).first()
+        if not member or member.role != 'owner':
+            return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+
+        org = Organization.query.get_or_404(org_id)
+        ws = org.workspace
+        member_count = OrganizationMember.query.filter_by(organization_id=org_id).count()
+
+        folder_count, file_count, total_size = 0, 0, 0
+        if ws:
+            folder_count = Folder.query.filter_by(workspace_id=ws.id).count()
+            row = db.session.query(func.count(File.id), func.sum(File.size)).join(
+                Folder, File.folder_id == Folder.id
+            ).filter(Folder.workspace_id == ws.id).first()
+            file_count = row[0] or 0
+            total_size = row[1] or 0
+
+        # Recent activity
+        recent_logs = []
+        if ws:
+            fids = [f.id for f in Folder.query.filter_by(workspace_id=ws.id).with_entities(Folder.id)]
+            if fids:
+                logs = ActionLog.query.filter(ActionLog.folder_id.in_(fids))\
+                    .order_by(ActionLog.timestamp.desc()).limit(15).all()
+                recent_logs = [l.to_dict() for l in logs]
+
+        return jsonify({
+            'success': True,
+            'member_count': member_count,
+            'folder_count': folder_count,
+            'file_count': file_count,
+            'total_size': total_size,
+            'total_size_human': format_bytes(total_size),
+            'recent_activity': recent_logs,
+            'invite_code': org.invite_code,
+            'created_at': org.created_at.isoformat(),
+        })
+    except Exception as e:
+        logger.error(f"Org stats error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/orgs/<int:org_id>/members', methods=['GET'])
+@api_login_required
+def api_get_org_members(org_id):
+    """List org members — owner only."""
+    try:
+        user = get_current_user()
+        member = OrganizationMember.query.filter_by(
+            user_id=user.id, organization_id=org_id
+        ).first()
+        if not member or member.role != 'owner':
+            return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+
+        members = OrganizationMember.query.filter_by(organization_id=org_id).all()
+        result = []
+        for m in members:
+            u = User.query.get(m.user_id)
+            if not u:
+                continue
+            role_info = m.custom_role.to_dict() if m.custom_role else None
+            result.append({
+                'user_id': u.id,
+                'username': u.username,
+                'email': u.email,
+                'first_name': u.first_name,
+                'last_name': u.last_name,
+                'phone': u.phone,
+                'full_name': u.full_name,
+                'joined_at': m.joined_at.isoformat(),
+                'role': m.role,
+                'custom_role_id': m.custom_role_id,
+                'custom_role': role_info,
+                'permissions_override': m.permissions_override or [],
+                'effective_permissions': _get_effective_permissions(m),
+            })
+        return jsonify({'success': True, 'members': result})
+    except Exception as e:
+        logger.error(f"Get org members error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/orgs/<int:org_id>/members/<int:target_user_id>', methods=['PUT'])
+@api_login_required
+@limiter.limit("20 per minute")
+def api_update_org_member(org_id, target_user_id):
+    """Update member role/permissions — owner only."""
+    try:
+        user = get_current_user()
+        caller = OrganizationMember.query.filter_by(
+            user_id=user.id, organization_id=org_id
+        ).first()
+        if not caller or caller.role != 'owner':
+            return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+        if target_user_id == user.id:
+            return jsonify({'success': False, 'message': 'Non puoi modificare il tuo account'}), 400
+
+        target = OrganizationMember.query.filter_by(
+            user_id=target_user_id, organization_id=org_id
+        ).first()
+        if not target:
+            return jsonify({'success': False, 'message': 'Membro non trovato'}), 404
+
+        data = request.get_json()
+
+        if 'role' in data and data['role'] in ('member', 'owner'):
+            target.role = data['role']
+
+        if 'custom_role_id' in data:
+            rid = data['custom_role_id']
+            if rid is None:
+                target.custom_role_id = None
+            else:
+                role = OrgRole.query.filter_by(id=rid, organization_id=org_id).first()
+                if not role:
+                    return jsonify({'success': False, 'message': 'Ruolo non trovato'}), 404
+                target.custom_role_id = rid
+                target.permissions_override = None  # clear override when using role
+
+        if 'permissions_override' in data:
+            perms = data['permissions_override']
+            if isinstance(perms, list) and perms:
+                valid = [p for p in perms if p in ALL_PERMISSION_KEYS]
+                target.permissions_override = valid or None
+                target.custom_role_id = None  # clear role when using manual override
+            else:
+                target.permissions_override = None
+
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Membro aggiornato'})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Update org member error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/orgs/<int:org_id>/members/<int:target_user_id>', methods=['DELETE'])
+@api_login_required
+@limiter.limit("10 per minute")
+def api_remove_org_member(org_id, target_user_id):
+    """Remove member from org — owner only."""
+    try:
+        user = get_current_user()
+        caller = OrganizationMember.query.filter_by(
+            user_id=user.id, organization_id=org_id
+        ).first()
+        if not caller or caller.role != 'owner':
+            return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+        if target_user_id == user.id:
+            return jsonify({'success': False, 'message': 'Non puoi rimuovere te stesso'}), 400
+
+        target = OrganizationMember.query.filter_by(
+            user_id=target_user_id, organization_id=org_id
+        ).first()
+        if not target:
+            return jsonify({'success': False, 'message': 'Membro non trovato'}), 404
+
+        u = User.query.get(target_user_id)
+        db.session.delete(target)
+        db.session.commit()
+        log_action('remove_member', details=f'Removed {u.username if u else target_user_id} from org {org_id}')
+        return jsonify({'success': True, 'message': 'Membro rimosso'})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Remove org member error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/orgs/<int:org_id>/roles', methods=['GET'])
+@api_login_required
+def api_get_org_roles(org_id):
+    """List custom roles — owner only."""
+    try:
+        user = get_current_user()
+        member = OrganizationMember.query.filter_by(
+            user_id=user.id, organization_id=org_id
+        ).first()
+        if not member or member.role != 'owner':
+            return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+        roles = OrgRole.query.filter_by(organization_id=org_id).all()
+        return jsonify({'success': True, 'roles': [r.to_dict() for r in roles]})
+    except Exception as e:
+        logger.error(f"Get org roles error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/orgs/<int:org_id>/roles', methods=['POST'])
+@api_login_required
+@limiter.limit("10 per minute")
+def api_create_org_role(org_id):
+    """Create custom role — owner only."""
+    try:
+        user = get_current_user()
+        member = OrganizationMember.query.filter_by(
+            user_id=user.id, organization_id=org_id
+        ).first()
+        if not member or member.role != 'owner':
+            return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+
+        data = request.get_json()
+        name = sanitize_name(data.get('name', ''))
+        if not name:
+            return jsonify({'success': False, 'message': 'Nome ruolo richiesto'}), 400
+
+        if OrgRole.query.filter_by(organization_id=org_id, name=name).first():
+            return jsonify({'success': False, 'message': 'Nome ruolo già in uso'}), 400
+
+        valid_perms = [p for p in data.get('permissions', []) if p in ALL_PERMISSION_KEYS]
+        color = data.get('color', 'accent')
+        if color not in ('accent', 'success', 'danger', 'warning', 'info'):
+            color = 'accent'
+
+        role = OrgRole(organization_id=org_id, name=name, permissions=valid_perms, color=color)
+        db.session.add(role)
+        db.session.commit()
+        return jsonify({'success': True, 'role': role.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Create org role error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/orgs/<int:org_id>/roles/<int:role_id>', methods=['PUT'])
+@api_login_required
+def api_update_org_role(org_id, role_id):
+    """Update custom role — owner only."""
+    try:
+        user = get_current_user()
+        member = OrganizationMember.query.filter_by(
+            user_id=user.id, organization_id=org_id
+        ).first()
+        if not member or member.role != 'owner':
+            return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+
+        role = OrgRole.query.filter_by(id=role_id, organization_id=org_id).first_or_404()
+        data = request.get_json()
+
+        if 'name' in data:
+            name = sanitize_name(data['name'])
+            if name:
+                clash = OrgRole.query.filter_by(organization_id=org_id, name=name)\
+                    .filter(OrgRole.id != role_id).first()
+                if clash:
+                    return jsonify({'success': False, 'message': 'Nome già in uso'}), 400
+                role.name = name
+
+        if 'permissions' in data:
+            role.permissions = [p for p in data['permissions'] if p in ALL_PERMISSION_KEYS]
+
+        if 'color' in data and data['color'] in ('accent', 'success', 'danger', 'warning', 'info'):
+            role.color = data['color']
+
+        db.session.commit()
+        return jsonify({'success': True, 'role': role.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Update org role error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/orgs/<int:org_id>/roles/<int:role_id>', methods=['DELETE'])
+@api_login_required
+def api_delete_org_role(org_id, role_id):
+    """Delete custom role and unassign members — owner only."""
+    try:
+        user = get_current_user()
+        member = OrganizationMember.query.filter_by(
+            user_id=user.id, organization_id=org_id
+        ).first()
+        if not member or member.role != 'owner':
+            return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+
+        role = OrgRole.query.filter_by(id=role_id, organization_id=org_id).first_or_404()
+        role_name = role.name
+        # Unassign members using this role
+        OrganizationMember.query.filter_by(custom_role_id=role_id).update({'custom_role_id': None})
+        db.session.delete(role)
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'Ruolo "{role_name}" eliminato'})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Delete org role error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+# ============================================================================
+# WEBSOCKET HANDLERS
+# ============================================================================
+
+def _make_user_presence(sid):
+    info = online_users.get(sid, {})
+    return {
+        'user_id': info.get('user_id'),
+        'username': info.get('username'),
+        'full_name': info.get('full_name'),
+        'folder_id': info.get('folder_id'),
+    }
+
+
+def _get_folder_users(folder_id, exclude_sid=None):
+    return [
+        _make_user_presence(sid)
+        for sid, info in online_users.items()
+        if info.get('folder_id') == folder_id and sid != exclude_sid
+    ]
+
+
+@socketio.on('connect')
+def handle_ws_connect():
+    user_id = session.get('user_id')
+    if not user_id:
+        return False  # reject unauthenticated
+    user = User.query.get(user_id)
+    if not user:
+        return False
+    from flask_socketio import request as sio_req
+    online_users[sio_req.sid] = {
+        'user_id': user.id,
+        'username': user.username,
+        'full_name': user.full_name,
+        'folder_id': None,
+        'connected_at': datetime.utcnow().isoformat(),
+    }
+    socketio.emit('users_online', list(online_users.values()))
+
+
+@socketio.on('disconnect')
+def handle_ws_disconnect():
+    from flask_socketio import request as sio_req
+    info = online_users.pop(sio_req.sid, None)
+    if info and info.get('folder_id'):
+        fid = info['folder_id']
+        socketio.emit('folder_presence',
+                      {'folder_id': fid, 'users': _get_folder_users(fid)},
+                      room=f'folder_{fid}')
+    socketio.emit('users_online', list(online_users.values()))
+
+
+@socketio.on('join_folder')
+def handle_join_folder(data):
+    from flask_socketio import request as sio_req
+    folder_id = data.get('folder_id')
+    sid = sio_req.sid
+    if sid not in online_users:
+        return
+    old_fid = online_users[sid].get('folder_id')
+    if old_fid and old_fid != folder_id:
+        leave_room(f'folder_{old_fid}')
+        socketio.emit('folder_presence',
+                      {'folder_id': old_fid, 'users': _get_folder_users(old_fid, exclude_sid=sid)},
+                      room=f'folder_{old_fid}')
+    online_users[sid]['folder_id'] = folder_id
+    if folder_id:
+        join_room(f'folder_{folder_id}')
+        socketio.emit('folder_presence',
+                      {'folder_id': folder_id, 'users': _get_folder_users(folder_id)},
+                      room=f'folder_{folder_id}')
+
+
+@socketio.on('leave_folder')
+def handle_leave_folder(data):
+    from flask_socketio import request as sio_req
+    folder_id = data.get('folder_id')
+    sid = sio_req.sid
+    if sid not in online_users or not folder_id:
+        return
+    leave_room(f'folder_{folder_id}')
+    online_users[sid]['folder_id'] = None
+    socketio.emit('folder_presence',
+                  {'folder_id': folder_id, 'users': _get_folder_users(folder_id)},
+                  room=f'folder_{folder_id}')
+
+
+@app.route('/api/users/online', methods=['GET'])
+@api_login_required
+def api_users_online():
+    """Return current online users list."""
+    return jsonify({'success': True, 'users': list(online_users.values())})
+
+
+# ============================================================================
+# EXCEL SAVE ENDPOINT
+# ============================================================================
+
+@app.route('/api/files/<int:file_id>/excel-save', methods=['POST'])
+@api_login_required
+@limiter.limit("20 per minute")
+def api_excel_save(file_id):
+    """Save edited Excel (base64-encoded xlsx) back to disk."""
+    try:
+        data = request.get_json()
+        b64_data = data.get('data', '')
+        if not b64_data:
+            return jsonify({'success': False, 'message': 'Nessun dato fornito'}), 400
+
+        file = File.query.get_or_404(file_id)
+        filename = file.original_name or file.name
+        ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+        if ext not in ('xlsx', 'xls', 'ods', 'csv', 'xlsm'):
+            return jsonify({'success': False, 'message': 'Tipo file non supportato per la modifica'}), 400
+
+        file_path = os.path.join(get_upload_folder(), file.file_path)
+        xlsx_bytes = base64.b64decode(b64_data)
+        with open(file_path, 'wb') as f:
+            f.write(xlsx_bytes)
+
+        file.size = os.path.getsize(file_path)
+        db.session.commit()
+
+        log_action('edit_excel', 'file', file_id, f'Excel edited: {filename}')
+        socketio.emit('file_updated',
+                      {'folder_id': file.folder_id, 'file': file.to_dict()},
+                      room=f'folder_{file.folder_id}')
+        return jsonify({'success': True, 'message': 'File Excel salvato'})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Excel save error: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============================================================================
 # ERROR HANDLERS
 # ============================================================================
 
@@ -1556,6 +2278,14 @@ if __name__ == '__main__':
             db.create_all()
             logger.info("✅ Database tables created")
 
+            # Initialize UPLOAD_FOLDER from StorageConfig
+            config = StorageConfig.query.first()
+            if config and config.active_disk_path and os.path.isdir(config.active_disk_path):
+                UPLOAD_FOLDER = config.active_disk_path
+                logger.info(f"✅ Active disk loaded from DB: {UPLOAD_FOLDER}")
+            else:
+                os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
             # Seed admin user if no users exist (first run)
             if User.query.count() == 0:
                 admin = User(username=ADMIN_USERNAME, email=ADMIN_EMAIL)
@@ -1609,10 +2339,12 @@ if __name__ == '__main__':
     print(f"✅ Server pronto!")
     print("═" * 80)
 
-    # Start server
-    app.run(
+    # Start server (socketio.run supports WebSocket; use eventlet worker in Gunicorn)
+    socketio.run(
+        app,
         host='0.0.0.0',
         port=5000,
         debug=False,
-        threaded=True
+        use_reloader=False,
+        log_output=False,
     )

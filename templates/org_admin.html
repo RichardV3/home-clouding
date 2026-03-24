@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — {{ org.name }} — IRIS-VE</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%236366f1'/><text x='50%25' y='55%25' font-size='18' text-anchor='middle' dominant-baseline='middle' fill='white'>I</text></svg>">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='iris-ve.css') }}">
+
+    <style>
+        .app-layout { display: flex; min-height: 100vh; }
+
+        /* ===== SIDEBAR ===== */
+        .sidebar {
+            width: 280px; flex-shrink: 0;
+            background: rgba(10,14,26,0.88);
+            backdrop-filter: var(--iris-blur); -webkit-backdrop-filter: var(--iris-blur);
+            border-right: 1px solid var(--iris-border);
+            display: flex; flex-direction: column;
+            position: fixed; top: 0; left: 0; height: 100vh;
+            overflow-y: auto; z-index: 50;
+            transition: transform 0.3s var(--iris-ease);
+        }
+        [data-theme="light"] .sidebar { background: rgba(238,242,255,0.92); }
+        .sidebar-header { padding: 22px 20px 18px; border-bottom: 1px solid var(--iris-border); }
+        .sidebar-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        .sidebar-brand-icon { width: 38px; height: 38px; background: var(--iris-accent-grad); border-radius: var(--iris-radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: white; box-shadow: 0 4px 12px rgba(99,102,241,0.4); flex-shrink: 0; }
+        .sidebar-brand-text { font-size: 1.1875rem; font-weight: 800; letter-spacing: -0.02em; color: var(--iris-text-primary); }
+        .sidebar-brand-text span { background: var(--iris-accent-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .sidebar-nav { padding: 14px 12px; flex: 1; }
+        .sidebar-section-label { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--iris-text-muted); padding: 0 8px; margin-bottom: 6px; margin-top: 14px; }
+        .sidebar-section-label:first-child { margin-top: 0; }
+        .sidebar-link { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--iris-radius-md); color: var(--iris-text-secondary); text-decoration: none; font-size: 0.875rem; font-weight: 500; transition: var(--iris-transition); cursor: pointer; border: none; background: none; width: 100%; text-align: left; }
+        .sidebar-link:hover, .sidebar-link.active { background: rgba(99,102,241,0.12); color: var(--iris-text-primary); }
+        .sidebar-link.active { color: var(--iris-accent-3); }
+        .sidebar-link i { font-size: 1.05rem; width: 20px; text-align: center; flex-shrink: 0; }
+        .sidebar-link.danger { color: var(--iris-danger); }
+        .sidebar-link.danger:hover { background: rgba(239,68,68,0.1); color: var(--iris-danger); }
+        .sidebar-footer { padding: 10px 12px 14px; border-top: 1px solid var(--iris-border); }
+
+        .sidebar-org-badge {
+            margin: 10px 12px 0;
+            background: rgba(99,102,241,0.1);
+            border: 1px solid rgba(99,102,241,0.2);
+            border-radius: var(--iris-radius-md);
+            padding: 10px 12px;
+            font-size: 0.8rem;
+            color: var(--iris-text-secondary);
+        }
+        .sidebar-org-badge .org-name { font-weight: 700; color: var(--iris-text-primary); font-size: 0.9rem; margin-bottom: 2px; }
+        .sidebar-org-badge .org-badge-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--iris-accent-3); font-weight: 700; }
+
+        /* ===== MAIN ===== */
+        .main-content { flex: 1; margin-left: 280px; display: flex; flex-direction: column; min-height: 100vh; }
+        .topbar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 12px; padding: 14px 28px; background: rgba(10,14,26,0.78); backdrop-filter: var(--iris-blur); -webkit-backdrop-filter: var(--iris-blur); border-bottom: 1px solid var(--iris-border); }
+        [data-theme="light"] .topbar { background: rgba(238,242,255,0.88); }
+        .topbar-title { font-size: 1.0625rem; font-weight: 700; color: var(--iris-text-primary); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .topbar-title a { color: var(--iris-text-muted); text-decoration: none; }
+        .topbar-title a:hover { color: var(--iris-text-primary); }
+        .topbar-title .sep { color: var(--iris-text-muted); font-weight: 400; margin: 0 6px; }
+        .content-area { padding: 28px; flex: 1; }
+
+        /* ===== ORG HEADER ===== */
+        .org-header-card {
+            background: var(--iris-bg-card); backdrop-filter: var(--iris-blur);
+            border: 1px solid var(--iris-border); border-radius: var(--iris-radius-xl);
+            padding: 28px; margin-bottom: 28px; position: relative; overflow: hidden;
+        }
+        .org-header-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--iris-accent-grad); }
+        .org-header-inner { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+        .org-icon { width: 68px; height: 68px; background: var(--iris-accent-grad); border-radius: var(--iris-radius-lg); display: flex; align-items: center; justify-content: center; font-size: 1.75rem; color: white; flex-shrink: 0; box-shadow: 0 8px 24px rgba(99,102,241,0.4); }
+        .org-info { flex: 1; min-width: 0; }
+        .org-title { font-size: 1.625rem; font-weight: 800; letter-spacing: -0.03em; color: var(--iris-text-primary); margin-bottom: 4px; }
+        .org-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 0.8125rem; color: var(--iris-text-muted); margin-bottom: 10px; }
+        .org-code-pill { display: inline-flex; align-items: center; gap: 6px; background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.25); border-radius: var(--iris-radius-pill); padding: 4px 12px; font-size: 0.8125rem; color: var(--iris-accent-3); font-weight: 700; letter-spacing: 0.1em; cursor: pointer; transition: var(--iris-transition); }
+        .org-code-pill:hover { background: rgba(99,102,241,0.2); }
+        .org-stat-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 4px; }
+        .org-stat-item { display: flex; align-items: center; gap: 6px; font-size: 0.8125rem; color: var(--iris-text-secondary); }
+        .org-stat-item i { color: var(--iris-accent); }
+
+        /* ===== STAT CARDS ===== */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
+        .stat-card { background: var(--iris-bg-card); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-lg); padding: 20px; transition: var(--iris-transition); }
+        .stat-card:hover { background: var(--iris-bg-card-hover); transform: translateY(-2px); }
+        .stat-card-icon { width: 44px; height: 44px; border-radius: var(--iris-radius-md); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-bottom: 12px; }
+        .stat-card-value { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.04em; color: var(--iris-text-primary); line-height: 1; margin-bottom: 4px; }
+        .stat-card-label { font-size: 0.75rem; font-weight: 600; color: var(--iris-text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+        /* ===== TABS ===== */
+        .tab-bar { display: flex; gap: 4px; margin-bottom: 24px; background: var(--iris-bg-card); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-lg); padding: 4px; width: fit-content; }
+        .tab-btn { padding: 8px 20px; border-radius: calc(var(--iris-radius-lg) - 4px); font-size: 0.875rem; font-weight: 600; cursor: pointer; border: none; background: none; color: var(--iris-text-secondary); transition: var(--iris-transition); display: flex; align-items: center; gap: 7px; }
+        .tab-btn.active { background: var(--iris-accent-grad); color: white; box-shadow: 0 2px 12px rgba(99,102,241,0.4); }
+        .tab-btn:hover:not(.active) { color: var(--iris-text-primary); background: var(--iris-bg-card-hover); }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
+        /* ===== MEMBERS TABLE ===== */
+        .members-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+        .members-search { position: relative; flex: 1; min-width: 200px; }
+        .members-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--iris-text-muted); font-size: 0.875rem; }
+        .members-search input { width: 100%; padding: 9px 12px 9px 34px; background: var(--iris-bg-input); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-pill); color: var(--iris-text-primary); font-size: 0.875rem; transition: var(--iris-transition); }
+        .members-search input:focus { outline: none; border-color: var(--iris-accent); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+
+        .members-table-wrap { background: var(--iris-bg-card); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-lg); overflow: hidden; overflow-x: auto; }
+        .members-table { width: 100%; border-collapse: collapse; min-width: 580px; }
+        .members-table th { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--iris-text-muted); padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--iris-border); white-space: nowrap; }
+        .members-table td { padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 0.875rem; vertical-align: middle; }
+        [data-theme="light"] .members-table td { border-bottom-color: rgba(0,0,0,0.05); }
+        .members-table tr:last-child td { border-bottom: none; }
+        .members-table tr:hover td { background: var(--iris-bg-card-hover); }
+        .member-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--iris-accent-grad); display: flex; align-items: center; justify-content: center; font-size: 0.8125rem; font-weight: 700; color: white; flex-shrink: 0; }
+        .member-name-col { display: flex; align-items: center; gap: 10px; }
+        .member-name { font-weight: 600; color: var(--iris-text-primary); }
+        .member-email { font-size: 0.75rem; color: var(--iris-text-muted); }
+
+        .role-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: var(--iris-radius-pill); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em; }
+        .role-badge-owner { background: rgba(99,102,241,0.15); color: var(--iris-accent-3); border: 1px solid rgba(99,102,241,0.3); }
+        .role-badge-member { background: rgba(148,163,184,0.1); color: var(--iris-text-secondary); border: 1px solid rgba(148,163,184,0.2); }
+        .role-badge-custom-accent  { background: rgba(99,102,241,0.15); color: var(--iris-accent-3); border: 1px solid rgba(99,102,241,0.3); }
+        .role-badge-custom-success { background: rgba(16,185,129,0.12); color: var(--iris-success); border: 1px solid rgba(16,185,129,0.25); }
+        .role-badge-custom-danger  { background: rgba(239,68,68,0.12); color: var(--iris-danger); border: 1px solid rgba(239,68,68,0.25); }
+        .role-badge-custom-warning { background: rgba(245,158,11,0.12); color: var(--iris-warning); border: 1px solid rgba(245,158,11,0.25); }
+        .role-badge-custom-info    { background: rgba(59,130,246,0.12); color: var(--iris-info); border: 1px solid rgba(59,130,246,0.25); }
+
+        .perm-chips { display: flex; flex-wrap: wrap; gap: 4px; max-width: 260px; }
+        .perm-chip { padding: 2px 7px; background: rgba(99,102,241,0.1); color: var(--iris-accent-3); border-radius: 4px; font-size: 0.7rem; font-weight: 600; white-space: nowrap; }
+
+        .action-btns { display: flex; gap: 4px; }
+
+        /* ===== ROLES GRID ===== */
+        .roles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+        .role-card { background: var(--iris-bg-card); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-lg); padding: 20px; transition: var(--iris-transition); position: relative; overflow: hidden; }
+        .role-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+        .role-card-accent::before  { background: var(--iris-accent-grad); }
+        .role-card-success::before { background: linear-gradient(90deg, var(--iris-success), #059669); }
+        .role-card-danger::before  { background: linear-gradient(90deg, var(--iris-danger), #dc2626); }
+        .role-card-warning::before { background: linear-gradient(90deg, var(--iris-warning), #d97706); }
+        .role-card-info::before    { background: linear-gradient(90deg, var(--iris-info), #2563eb); }
+        .role-card:hover { background: var(--iris-bg-card-hover); transform: translateY(-3px); box-shadow: 0 12px 32px rgba(99,102,241,0.1), var(--iris-shadow); }
+        .role-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+        .role-card-name { font-size: 1.0625rem; font-weight: 800; color: var(--iris-text-primary); letter-spacing: -0.02em; }
+        .role-card-perms { display: flex; flex-direction: column; gap: 5px; }
+        .role-card-perm { display: flex; align-items: center; gap: 7px; font-size: 0.8125rem; color: var(--iris-text-secondary); }
+        .role-card-perm i { width: 14px; text-align: center; }
+        .role-card-perm.granted { color: var(--iris-success); }
+        .role-card-perm.denied  { color: var(--iris-text-muted); opacity: 0.5; }
+        .role-card-footer { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--iris-border); display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; color: var(--iris-text-muted); }
+        .role-new-card { border: 2px dashed var(--iris-border); background: transparent; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-height: 180px; gap: 10px; }
+        .role-new-card:hover { border-color: var(--iris-accent); background: rgba(99,102,241,0.04); }
+        .role-new-icon { width: 52px; height: 52px; background: rgba(99,102,241,0.1); border-radius: var(--iris-radius-md); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: var(--iris-accent); }
+
+        /* ===== ACTIVITY LOG ===== */
+        .activity-list { display: flex; flex-direction: column; gap: 6px; }
+        .activity-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--iris-bg-card); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-md); font-size: 0.8125rem; }
+        .activity-icon { width: 30px; height: 30px; border-radius: var(--iris-radius-sm); display: flex; align-items: center; justify-content: center; font-size: 0.875rem; flex-shrink: 0; }
+        .activity-text { flex: 1; color: var(--iris-text-secondary); }
+        .activity-text strong { color: var(--iris-text-primary); }
+        .activity-time { font-size: 0.75rem; color: var(--iris-text-muted); white-space: nowrap; }
+
+        /* ===== MODALS ===== */
+        .perm-toggle-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+        .perm-toggle-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--iris-bg-input); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-md); }
+        .perm-toggle-item label { font-size: 0.875rem; color: var(--iris-text-primary); font-weight: 500; cursor: pointer; }
+        .perm-checkbox { width: 18px; height: 18px; accent-color: var(--iris-accent); cursor: pointer; }
+        .color-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+        .color-swatch { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: var(--iris-transition); }
+        .color-swatch.selected { border-color: var(--iris-text-primary); transform: scale(1.15); }
+        .color-swatch-accent  { background: var(--iris-accent); }
+        .color-swatch-success { background: var(--iris-success); }
+        .color-swatch-danger  { background: var(--iris-danger); }
+        .color-swatch-warning { background: var(--iris-warning); }
+        .color-swatch-info    { background: var(--iris-info); }
+
+        /* Mobile */
+        .sidebar-toggle { display: none; background: var(--iris-bg-card); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-md); width: 36px; height: 36px; align-items: center; justify-content: center; cursor: pointer; color: var(--iris-text-secondary); font-size: 1.05rem; flex-shrink: 0; }
+
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.mobile-open { transform: translateX(0); box-shadow: 4px 0 32px rgba(0,0,0,0.4); }
+            .main-content { margin-left: 0; }
+            .sidebar-toggle { display: flex; }
+            .content-area { padding: 14px; }
+            .topbar { padding: 10px 14px; }
+            .org-header-inner { flex-direction: column; align-items: flex-start; }
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .roles-grid { grid-template-columns: 1fr; }
+            .tab-bar { width: 100%; }
+            .tab-btn { flex: 1; justify-content: center; }
+        }
+        @media (max-width: 480px) {
+            .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .tab-btn { padding: 8px 10px; font-size: 0.8125rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Sidebar backdrop -->
+<div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+<div class="app-layout">
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a class="sidebar-brand" href="/dashboard">
+                <div class="sidebar-brand-icon"><i class="bi bi-shield-lock-fill"></i></div>
+                <span class="sidebar-brand-text">IRIS<span>-VE</span></span>
+            </a>
+        </div>
+
+        <div class="sidebar-org-badge">
+            <div class="org-badge-label"><i class="bi bi-building me-1"></i>Organizzazione</div>
+            <div class="org-name">{{ org.name }}</div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="sidebar-section-label">Navigazione</div>
+            <a class="sidebar-link" href="/dashboard"><i class="bi bi-grid-3x3-gap-fill"></i> Dashboard</a>
+            <a class="sidebar-link" href="/documentation"><i class="bi bi-book-fill"></i> Documentazione</a>
+
+            <div class="sidebar-section-label">Organizzazione</div>
+            <a class="sidebar-link active" href="/org/{{ org.id }}/admin">
+                <i class="bi bi-shield-fill-check"></i> Admin Dashboard
+            </a>
+            {% if org.workspace %}
+            <a class="sidebar-link" href="/workspace/{{ org.workspace.id }}">
+                <i class="bi bi-folder-fill"></i> Workspace
+            </a>
+            {% endif %}
+
+            {% for ws_info in user_workspaces %}
+            {% if ws_info.org.id != org.id and ws_info.role == 'owner' %}
+            <a class="sidebar-link" href="/org/{{ ws_info.org.id }}/admin">
+                <i class="bi bi-building"></i> Admin: {{ ws_info.org.name|truncate(20) }}
+            </a>
+            {% endif %}
+            {% endfor %}
+        </nav>
+
+        <div class="sidebar-footer">
+            <a class="sidebar-link danger" href="/logout"><i class="bi bi-box-arrow-left"></i> Esci</a>
+        </div>
+    </aside>
+
+    <!-- ===== MAIN ===== -->
+    <main class="main-content">
+        <header class="topbar">
+            <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Apri menu">
+                <i class="bi bi-list"></i>
+            </button>
+            <div class="topbar-title">
+                <a href="/dashboard">Dashboard</a>
+                <span class="sep">/</span>
+                <i class="bi bi-building me-1" style="color:var(--iris-accent);font-size:0.9rem;"></i>{{ org.name }}
+                <span class="sep">/</span>
+                Admin
+            </div>
+            <button class="iris-theme-toggle" onclick="toggleTheme()" title="Cambia tema">
+                <i class="bi bi-moon-stars-fill" id="theme-icon"></i>
+            </button>
+        </header>
+
+        <div class="content-area">
+
+            <!-- ORG HEADER -->
+            <div class="org-header-card">
+                <div class="org-header-inner">
+                    <div class="org-icon"><i class="bi bi-building-fill"></i></div>
+                    <div class="org-info">
+                        <div class="org-title">{{ org.name }}</div>
+                        <div class="org-meta">
+                            <span><i class="bi bi-person-fill me-1"></i>{{ user.username }}</span>
+                            {% if org.address %}<span><i class="bi bi-geo-alt me-1"></i>{{ org.address }}</span>{% endif %}
+                            {% if org.phone %}<span><i class="bi bi-telephone me-1"></i>{{ org.phone }}</span>{% endif %}
+                        </div>
+                        <div class="org-stat-row">
+                            <span class="org-stat-item"><i class="bi bi-people-fill"></i><span id="hdrMembers">—</span> membri</span>
+                            <span class="org-stat-item"><i class="bi bi-folder-fill"></i><span id="hdrFolders">—</span> cartelle</span>
+                            <span class="org-stat-item"><i class="bi bi-files"></i><span id="hdrFiles">—</span> file</span>
+                            <span class="org-stat-item"><i class="bi bi-hdd-fill"></i><span id="hdrSize">—</span></span>
+                        </div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+                        <div class="org-code-pill" onclick="copyInviteCode()" title="Clicca per copiare">
+                            <i class="bi bi-key-fill"></i>{{ org.invite_code }}
+                        </div>
+                        <span style="font-size:0.7rem;color:var(--iris-text-muted);">Codice invito</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STATS OVERVIEW -->
+            <div class="stats-grid iris-stagger" id="statsGrid">
+                <div class="stat-card">
+                    <div class="stat-card-icon" style="background:rgba(99,102,241,0.12);color:var(--iris-accent);"><i class="bi bi-people-fill"></i></div>
+                    <div class="stat-card-value" id="statMembers">—</div>
+                    <div class="stat-card-label">Membri totali</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon" style="background:rgba(245,158,11,0.12);color:var(--iris-warning);"><i class="bi bi-folder-fill"></i></div>
+                    <div class="stat-card-value" id="statFolders">—</div>
+                    <div class="stat-card-label">Cartelle</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon" style="background:rgba(16,185,129,0.12);color:var(--iris-success);"><i class="bi bi-files"></i></div>
+                    <div class="stat-card-value" id="statFiles">—</div>
+                    <div class="stat-card-label">File totali</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-card-icon" style="background:rgba(59,130,246,0.12);color:var(--iris-info);"><i class="bi bi-hdd-stack-fill"></i></div>
+                    <div class="stat-card-value" id="statSize">—</div>
+                    <div class="stat-card-label">Spazio usato</div>
+                </div>
+            </div>
+
+            <!-- TABS -->
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="showTab('members')" id="tabBtnMembers">
+                    <i class="bi bi-people-fill"></i> Membri
+                </button>
+                <button class="tab-btn" onclick="showTab('roles')" id="tabBtnRoles">
+                    <i class="bi bi-key-fill"></i> Ruoli
+                </button>
+                <button class="tab-btn" onclick="showTab('activity')" id="tabBtnActivity">
+                    <i class="bi bi-clock-history"></i> Attività
+                </button>
+            </div>
+
+            <!-- ===== MEMBERS TAB ===== -->
+            <div class="tab-pane active" id="tabMembers">
+                <div class="members-toolbar">
+                    <div class="members-search">
+                        <i class="bi bi-search"></i>
+                        <input type="text" id="memberSearch" placeholder="Cerca membro…" oninput="filterMembers(this.value)" autocomplete="off">
+                    </div>
+                    <button class="btn-iris btn-iris-ghost btn-iris-sm" onclick="loadMembers()">
+                        <i class="bi bi-arrow-clockwise"></i> Aggiorna
+                    </button>
+                </div>
+                <div class="members-table-wrap">
+                    <table class="members-table">
+                        <thead>
+                            <tr>
+                                <th>Utente</th>
+                                <th>Ruolo</th>
+                                <th>Permessi effettivi</th>
+                                <th>Membro dal</th>
+                                <th>Stato</th>
+                                <th style="text-align:right;">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody id="membersTableBody">
+                            <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--iris-text-muted);">
+                                <div style="width:24px;height:24px;border:2px solid var(--iris-border);border-top-color:var(--iris-accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 8px;"></div>
+                                Caricamento…
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ===== ROLES TAB ===== -->
+            <div class="tab-pane" id="tabRoles">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+                    <div>
+                        <div style="font-size:1.0625rem;font-weight:700;color:var(--iris-text-primary);">Ruoli Personalizzati</div>
+                        <div style="font-size:0.8125rem;color:var(--iris-text-muted);">Crea ruoli con permessi predefiniti da assegnare ai membri</div>
+                    </div>
+                    <button class="btn-iris btn-iris-primary btn-iris-sm" onclick="openCreateRoleModal()">
+                        <i class="bi bi-plus-lg"></i> Nuovo ruolo
+                    </button>
+                </div>
+                <div class="roles-grid" id="rolesGrid">
+                    <div style="text-align:center;padding:40px;color:var(--iris-text-muted);">
+                        <div style="width:24px;height:24px;border:2px solid var(--iris-border);border-top-color:var(--iris-accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 8px;"></div>
+                        Caricamento…
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== ACTIVITY TAB ===== -->
+            <div class="tab-pane" id="tabActivity">
+                <div style="font-size:1.0625rem;font-weight:700;color:var(--iris-text-primary);margin-bottom:16px;">Attività Recente</div>
+                <div class="activity-list" id="activityList">
+                    <div style="text-align:center;padding:40px;color:var(--iris-text-muted);">Caricamento…</div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<!-- ===== MODAL EDIT MEMBER ===== -->
+<div class="iris-modal-overlay" id="editMemberModal" style="display:none;" onclick="if(event.target===this)closeEditMemberModal()">
+    <div class="iris-modal" style="max-width:520px;" onclick="event.stopPropagation()">
+        <div class="iris-modal-header">
+            <span class="iris-modal-title"><i class="bi bi-person-gear me-2" style="color:var(--iris-accent);"></i><span id="editMemberTitle">Modifica Membro</span></span>
+            <button class="iris-modal-close" onclick="closeEditMemberModal()"><i class="bi bi-x"></i></button>
+        </div>
+
+        <input type="hidden" id="editMemberUserId">
+
+        <div class="iris-input-group">
+            <label>Ruolo nel sistema</label>
+            <select id="editMemberRole" class="iris-input" style="cursor:pointer;">
+                <option value="member">Membro</option>
+                <option value="owner">Owner</option>
+            </select>
+        </div>
+
+        <div class="iris-input-group">
+            <label>Ruolo personalizzato</label>
+            <select id="editMemberCustomRole" class="iris-input" style="cursor:pointer;" onchange="onCustomRoleChange()">
+                <option value="">— Nessun ruolo personalizzato —</option>
+            </select>
+        </div>
+
+        <div id="manualPermsSection">
+            <div class="iris-input-group" style="margin-bottom:8px;">
+                <label>Permessi manuali <span style="font-size:0.7rem;color:var(--iris-text-muted);font-weight:400;text-transform:none;">(sovrascrive il ruolo personalizzato)</span></label>
+            </div>
+            <div class="perm-toggle-list" id="permToggleList"></div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:20px;">
+            <button class="btn-iris btn-iris-ghost" style="flex:1;" onclick="closeEditMemberModal()">Annulla</button>
+            <button class="btn-iris btn-iris-primary" style="flex:2;" onclick="saveEditMember()"><i class="bi bi-check-lg"></i> Salva modifiche</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL CREATE/EDIT ROLE ===== -->
+<div class="iris-modal-overlay" id="roleModal" style="display:none;" onclick="if(event.target===this)closeRoleModal()">
+    <div class="iris-modal" style="max-width:520px;" onclick="event.stopPropagation()">
+        <div class="iris-modal-header">
+            <span class="iris-modal-title" id="roleModalTitle"><i class="bi bi-key-fill me-2" style="color:var(--iris-accent);"></i>Nuovo Ruolo</span>
+            <button class="iris-modal-close" onclick="closeRoleModal()"><i class="bi bi-x"></i></button>
+        </div>
+
+        <input type="hidden" id="roleModalId">
+
+        <div class="iris-input-group">
+            <label>Nome ruolo *</label>
+            <input type="text" id="roleModalName" class="iris-input" placeholder="Es. Editor, Visualizzatore…" maxlength="100">
+        </div>
+
+        <div class="iris-input-group">
+            <label>Colore</label>
+            <div class="color-picker" id="roleColorPicker">
+                <div class="color-swatch color-swatch-accent selected" data-color="accent" onclick="selectColor('accent')"></div>
+                <div class="color-swatch color-swatch-success" data-color="success" onclick="selectColor('success')"></div>
+                <div class="color-swatch color-swatch-danger" data-color="danger" onclick="selectColor('danger')"></div>
+                <div class="color-swatch color-swatch-warning" data-color="warning" onclick="selectColor('warning')"></div>
+                <div class="color-swatch color-swatch-info" data-color="info" onclick="selectColor('info')"></div>
+            </div>
+        </div>
+
+        <div class="iris-input-group">
+            <label>Permessi</label>
+            <div class="perm-toggle-list" id="rolePermToggleList"></div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:20px;">
+            <button class="btn-iris btn-iris-ghost" style="flex:1;" onclick="closeRoleModal()">Annulla</button>
+            <button class="btn-iris btn-iris-primary" style="flex:2;" onclick="saveRole()"><i class="bi bi-check-lg"></i> <span id="roleModalSaveLbl">Crea ruolo</span></button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== TOAST ===== -->
+<div class="iris-toast-container" id="toastContainer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+<script>
+const ORG_ID = {{ org.id }};
+const ALL_PERMISSIONS = {{ all_permissions | tojson }};
+
+/* ===== THEME ===== */
+function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    document.getElementById('theme-icon').className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+    localStorage.setItem('iris-theme', isDark ? 'light' : 'dark');
+}
+(function() {
+    const saved = localStorage.getItem('iris-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    const icon = document.getElementById('theme-icon');
+    if (icon) icon.className = saved === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+})();
+
+/* ===== SIDEBAR ===== */
+function toggleSidebar() {
+    const s = document.getElementById('sidebar'), b = document.getElementById('sidebarBackdrop');
+    if (s.classList.contains('mobile-open')) { closeSidebar(); }
+    else { s.classList.add('mobile-open'); b.classList.add('active'); document.body.style.overflow = 'hidden'; }
+}
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('mobile-open');
+    document.getElementById('sidebarBackdrop').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+/* ===== TOAST ===== */
+function showToast(type, title, msg, dur = 4500) {
+    const icons = { success:'bi-check-circle-fill', error:'bi-x-circle-fill', info:'bi-info-circle-fill', warning:'bi-exclamation-triangle-fill' };
+    const t = document.createElement('div');
+    t.className = `iris-toast iris-toast-${type}`;
+    t.innerHTML = `<div class="iris-toast-icon"><i class="bi ${icons[type]||'bi-bell-fill'}"></i></div>
+        <div class="iris-toast-body"><div class="iris-toast-title">${escHtml(title)}</div>${msg?`<div class="iris-toast-msg">${escHtml(msg)}</div>`:''}</div>
+        <button class="iris-toast-close" onclick="this.parentElement.remove()"><i class="bi bi-x"></i></button>`;
+    document.getElementById('toastContainer').appendChild(t);
+    setTimeout(() => t.classList.add('removing') || setTimeout(() => t.remove(), 300), dur);
+}
+function escHtml(s) {
+    const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML;
+}
+
+/* ===== TABS ===== */
+function showTab(name) {
+    ['members','roles','activity'].forEach(t => {
+        document.getElementById('tabPaneId_'+t)?.classList.remove('active') ||
+        document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1))?.classList.remove('active');
+        document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1))?.classList.remove('active');
+    });
+    // Actually use direct IDs
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab' + name.charAt(0).toUpperCase() + name.slice(1))?.classList.add('active');
+    document.getElementById('tabBtn' + name.charAt(0).toUpperCase() + name.slice(1))?.classList.add('active');
+    if (name === 'roles') loadRoles();
+    if (name === 'activity') loadActivity();
+}
+
+/* ===== COPY INVITE CODE ===== */
+function copyInviteCode() {
+    const code = '{{ org.invite_code }}';
+    navigator.clipboard.writeText(code).then(() => showToast('success', 'Codice copiato!', code));
+}
+
+/* ===== LOAD STATS ===== */
+async function loadStats() {
+    try {
+        const r = await fetch(`/api/orgs/${ORG_ID}/stats`);
+        const d = await r.json();
+        if (!d.success) return;
+        document.getElementById('statMembers').textContent = d.member_count;
+        document.getElementById('statFolders').textContent = d.folder_count;
+        document.getElementById('statFiles').textContent = d.file_count;
+        document.getElementById('statSize').textContent = d.total_size_human;
+        document.getElementById('hdrMembers').textContent = d.member_count;
+        document.getElementById('hdrFolders').textContent = d.folder_count;
+        document.getElementById('hdrFiles').textContent = d.file_count;
+        document.getElementById('hdrSize').textContent = d.total_size_human;
+    } catch(e) { console.error(e); }
+}
+
+// ===== ONLINE PRESENCE (Socket.IO) =====
+let onlineUserIds = new Set();
+function initSocketPresence() {
+    try {
+        const socket = io({ transports: ['websocket','polling'] });
+        socket.on('users_online', (users) => {
+            onlineUserIds = new Set((users||[]).map(u => u.user_id));
+            document.querySelectorAll('[data-member-uid]').forEach(el => {
+                const uid = parseInt(el.dataset.memberUid);
+                el.querySelectorAll('.member-online-dot').forEach(dot => {
+                    dot.style.background = onlineUserIds.has(uid) ? 'var(--iris-success)' : 'rgba(148,163,184,0.25)';
+                });
+                const statusCell = el.querySelector('.member-status-cell');
+                if (statusCell) statusCell.innerHTML = onlineUserIds.has(uid)
+                    ? '<span style="color:var(--iris-success);font-weight:600;font-size:0.75rem;"><i class="bi bi-circle-fill me-1" style="font-size:0.5rem;"></i>Online</span>'
+                    : '<span style="color:var(--iris-text-muted);font-size:0.75rem;">Offline</span>';
+            });
+        });
+    } catch(e) { console.warn('Socket.IO not available'); }
+}
+
+/* ===== MEMBERS ===== */
+let allMembers = [];
+async function loadMembers() {
+    try {
+        const r = await fetch(`/api/orgs/${ORG_ID}/members`);
+        const d = await r.json();
+        if (!d.success) { showToast('error', 'Errore', d.message); return; }
+        allMembers = d.members;
+        renderMembers(allMembers);
+    } catch(e) { showToast('error', 'Errore di rete', e.message); }
+}
+
+function renderMembers(members) {
+    const tbody = document.getElementById('membersTableBody');
+    if (!members.length) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--iris-text-muted);">Nessun membro trovato</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = members.map(m => {
+        const initials = m.username.slice(0,2).toUpperCase();
+        const isOnline = onlineUserIds.has(m.user_id);
+        const fullName = m.full_name && m.full_name !== m.username ? escHtml(m.full_name) : '';
+        const roleBadge = m.role === 'owner'
+            ? `<span class="role-badge role-badge-owner"><i class="bi bi-star-fill"></i> Owner</span>`
+            : (m.custom_role
+                ? `<span class="role-badge role-badge-custom-${m.custom_role.color||'accent'}">${escHtml(m.custom_role.name)}</span>`
+                : `<span class="role-badge role-badge-member">Membro</span>`);
+        const permChips = m.effective_permissions.slice(0,3).map(p => {
+            const label = ALL_PERMISSIONS.find(x => x[0] === p)?.[1] || p;
+            return `<span class="perm-chip">${escHtml(label)}</span>`;
+        }).join('') + (m.effective_permissions.length > 3 ? `<span class="perm-chip">+${m.effective_permissions.length-3}</span>` : '');
+        const joined = new Date(m.joined_at).toLocaleDateString('it-IT');
+        const isOwnerRow = m.role === 'owner';
+        const actions = isOwnerRow ? `<span style="font-size:0.75rem;color:var(--iris-text-muted);">—</span>`
+            : `<div class="action-btns">
+                <button class="btn-iris btn-iris-ghost btn-iris-sm btn-iris-icon" onclick="openEditMemberModal(${m.user_id})" title="Modifica"><i class="bi bi-pencil"></i></button>
+                <button class="btn-iris btn-iris-danger btn-iris-sm btn-iris-icon" onclick="removeMember(${m.user_id},'${escHtml(m.username)}')" title="Rimuovi"><i class="bi bi-trash"></i></button></div>`;
+        return `<tr data-member-uid="${m.user_id}" data-name="${escHtml(m.username.toLowerCase())}" data-email="${escHtml(m.email.toLowerCase())}">
+            <td><div class="member-name-col" style="gap:10px;">
+                <div style="position:relative;flex-shrink:0;">
+                    <div class="member-avatar">${initials}</div>
+                    <span class="member-online-dot" style="position:absolute;bottom:0;right:0;width:10px;height:10px;border-radius:50%;border:2px solid var(--iris-bg-card);background:${isOnline?'var(--iris-success)':'rgba(148,163,184,0.25)'};" title="${isOnline?'Online':'Offline'}"></span>
+                </div>
+                <div>
+                    <div class="member-name">${escHtml(m.username)}${fullName?` <span style="font-weight:400;color:var(--iris-text-muted);font-size:0.8rem;">(${fullName})</span>`:''}</div>
+                    <div class="member-email">${escHtml(m.email)}</div>
+                    ${m.phone?`<div style="font-size:0.7rem;color:var(--iris-text-muted);"><i class="bi bi-telephone me-1"></i>${escHtml(m.phone)}</div>`:''}
+                </div>
+            </div></td>
+            <td>${roleBadge}</td>
+            <td><div class="perm-chips">${permChips}</div></td>
+            <td style="white-space:nowrap;color:var(--iris-text-muted);">${joined}</td>
+            <td class="member-status-cell">${isOnline
+                ?'<span style="color:var(--iris-success);font-weight:600;font-size:0.75rem;"><i class="bi bi-circle-fill me-1" style="font-size:0.5rem;"></i>Online</span>'
+                :'<span style="color:var(--iris-text-muted);font-size:0.75rem;">Offline</span>'}</td>
+            <td style="text-align:right;">${actions}</td>
+        </tr>`;
+    }).join('');
+}
+
+function filterMembers(q) {
+    q = q.toLowerCase();
+    document.querySelectorAll('#membersTableBody tr[data-name]').forEach(tr => {
+        const match = tr.dataset.name.includes(q) || tr.dataset.email.includes(q);
+        tr.style.display = match ? '' : 'none';
+    });
+}
+
+async function removeMember(userId, username) {
+    if (!confirm(`Rimuovere "${username}" dall'organizzazione?\nI suoi file nel workspace rimarranno.`)) return;
+    try {
+        const r = await fetch(`/api/orgs/${ORG_ID}/members/${userId}`, { method: 'DELETE' });
+        const d = await r.json();
+        if (d.success) { showToast('success', 'Membro rimosso', username); await loadMembers(); await loadStats(); }
+        else showToast('error', 'Errore', d.message);
+    } catch(e) { showToast('error', 'Errore di rete', e.message); }
+}
+
+// ===== EDIT MEMBER MODAL =====
+let allRoles = [];
+function openEditMemberModal(userId) {
+    const m = allMembers.find(x => x.user_id === userId);
+    if (!m) return;
+    document.getElementById('editMemberUserId').value = userId;
+    document.getElementById('editMemberTitle').textContent = `Modifica: ${m.username}`;
+    document.getElementById('editMemberRole').value = m.role;
+
+    // Populate custom role select
+    const sel = document.getElementById('editMemberCustomRole');
+    sel.innerHTML = '<option value="">— Nessun ruolo personalizzato —</option>';
+    allRoles.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.id; opt.textContent = r.name;
+        if (m.custom_role_id === r.id) opt.selected = true;
+        sel.appendChild(opt);
+    });
+
+    // Permission checkboxes
+    renderPermToggles('permToggleList', m.permissions_override || []);
+
+    document.getElementById('editMemberModal').style.display = 'flex';
+}
+
+function renderPermToggles(containerId, selected) {
+    const el = document.getElementById(containerId);
+    el.innerHTML = ALL_PERMISSIONS.map(([key, label]) =>
+        `<div class="perm-toggle-item">
+            <label for="perm_${containerId}_${key}">${escHtml(label)}</label>
+            <input type="checkbox" class="perm-checkbox" id="perm_${containerId}_${key}"
+                   data-perm="${key}" ${selected.includes(key) ? 'checked' : ''}>
+         </div>`
+    ).join('');
+}
+
+function onCustomRoleChange() {
+    const roleId = document.getElementById('editMemberCustomRole').value;
+    if (roleId) {
+        // Uncheck all manual perms when a role is selected
+        document.querySelectorAll('#permToggleList .perm-checkbox').forEach(c => c.checked = false);
+    }
+}
+
+function closeEditMemberModal() {
+    document.getElementById('editMemberModal').style.display = 'none';
+}
+
+async function saveEditMember() {
+    const userId = document.getElementById('editMemberUserId').value;
+    const role = document.getElementById('editMemberRole').value;
+    const customRoleId = document.getElementById('editMemberCustomRole').value || null;
+    const checkedPerms = [...document.querySelectorAll('#permToggleList .perm-checkbox:checked')]
+        .map(c => c.dataset.perm);
+
+    const body = { role };
+    if (customRoleId) {
+        body.custom_role_id = parseInt(customRoleId);
+    } else if (checkedPerms.length) {
+        body.permissions_override = checkedPerms;
+        body.custom_role_id = null;
+    } else {
+        body.custom_role_id = null;
+        body.permissions_override = [];
+    }
+
+    try {
+        const r = await fetch(`/api/orgs/${ORG_ID}/members/${userId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const d = await r.json();
+        if (d.success) {
+            showToast('success', 'Membro aggiornato');
+            closeEditMemberModal();
+            await loadMembers();
+        } else showToast('error', 'Errore', d.message);
+    } catch(e) { showToast('error', 'Errore di rete', e.message); }
+}
+
+// ===== ROLES =====
+async function loadRoles() {
+    try {
+        const r = await fetch(`/api/orgs/${ORG_ID}/roles`);
+        const d = await r.json();
+        if (!d.success) return;
+        allRoles = d.roles;
+        renderRoles(allRoles);
+        // Refresh custom role select in member modal if open
+        const sel = document.getElementById('editMemberCustomRole');
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">— Nessun ruolo personalizzato —</option>';
+        allRoles.forEach(ro => {
+            const opt = document.createElement('option');
+            opt.value = ro.id; opt.textContent = ro.name;
+            if (String(ro.id) === cur) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    } catch(e) { console.error(e); }
+}
+
+function renderRoles(roles) {
+    const grid = document.getElementById('rolesGrid');
+    const permLabels = Object.fromEntries(ALL_PERMISSIONS);
+    const allKeys = ALL_PERMISSIONS.map(p => p[0]);
+
+    const cards = roles.map(r => {
+        const allPermsHtml = allKeys.map(k => {
+            const granted = (r.permissions || []).includes(k);
+            const label = permLabels[k] || k;
+            return `<div class="role-card-perm ${granted ? 'granted' : 'denied'}">
+                <i class="bi ${granted ? 'bi-check-circle-fill' : 'bi-circle'}"></i>${escHtml(label)}
+            </div>`;
+        }).join('');
+
+        return `<div class="role-card role-card-${r.color || 'accent'}">
+            <div class="role-card-header">
+                <div class="role-card-name">${escHtml(r.name)}</div>
+                <div style="display:flex;gap:4px;">
+                    <button class="btn-iris btn-iris-ghost btn-iris-sm btn-iris-icon" onclick="openEditRoleModal(${r.id})" title="Modifica"><i class="bi bi-pencil"></i></button>
+                    <button class="btn-iris btn-iris-danger btn-iris-sm btn-iris-icon" onclick="deleteRole(${r.id},'${escHtml(r.name)}')" title="Elimina"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>
+            <div class="role-card-perms">${allPermsHtml}</div>
+            <div class="role-card-footer">
+                <span>Creato: ${new Date(r.created_at).toLocaleDateString('it-IT')}</span>
+                <span class="iris-badge iris-badge-accent">${(r.permissions||[]).length} permessi</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    grid.innerHTML = cards + `<div class="role-card role-new-card glass-card" onclick="openCreateRoleModal()">
+        <div class="role-new-icon"><i class="bi bi-plus-lg"></i></div>
+        <div style="font-weight:700;color:var(--iris-text-primary);">Nuovo Ruolo</div>
+        <div style="font-size:0.8125rem;color:var(--iris-text-muted);">Crea un ruolo personalizzato</div>
+    </div>`;
+}
+
+// ===== ROLE MODAL =====
+let selectedColor = 'accent';
+
+function selectColor(c) {
+    selectedColor = c;
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+    document.querySelector(`.color-swatch-${c}`)?.classList.add('selected');
+}
+
+function openCreateRoleModal() {
+    document.getElementById('roleModalId').value = '';
+    document.getElementById('roleModalTitle').innerHTML = '<i class="bi bi-key-fill me-2" style="color:var(--iris-accent);"></i>Nuovo Ruolo';
+    document.getElementById('roleModalSaveLbl').textContent = 'Crea ruolo';
+    document.getElementById('roleModalName').value = '';
+    selectColor('accent');
+    renderPermToggles('rolePermToggleList', []);
+    document.getElementById('roleModal').style.display = 'flex';
+}
+
+function openEditRoleModal(roleId) {
+    const role = allRoles.find(r => r.id === roleId);
+    if (!role) return;
+    document.getElementById('roleModalId').value = roleId;
+    document.getElementById('roleModalTitle').innerHTML = `<i class="bi bi-pencil me-2" style="color:var(--iris-accent);"></i>Modifica Ruolo`;
+    document.getElementById('roleModalSaveLbl').textContent = 'Salva modifiche';
+    document.getElementById('roleModalName').value = role.name;
+    selectColor(role.color || 'accent');
+    renderPermToggles('rolePermToggleList', role.permissions || []);
+    document.getElementById('roleModal').style.display = 'flex';
+}
+
+function closeRoleModal() {
+    document.getElementById('roleModal').style.display = 'none';
+}
+
+async function saveRole() {
+    const roleId = document.getElementById('roleModalId').value;
+    const name = document.getElementById('roleModalName').value.trim();
+    if (!name) { showToast('warning', 'Nome richiesto'); return; }
+    const permissions = [...document.querySelectorAll('#rolePermToggleList .perm-checkbox:checked')]
+        .map(c => c.dataset.perm);
+    const body = { name, permissions, color: selectedColor };
+
+    try {
+        const url = roleId ? `/api/orgs/${ORG_ID}/roles/${roleId}` : `/api/orgs/${ORG_ID}/roles`;
+        const r = await fetch(url, {
+            method: roleId ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const d = await r.json();
+        if (d.success) {
+            showToast('success', roleId ? 'Ruolo aggiornato' : 'Ruolo creato', name);
+            closeRoleModal();
+            await loadRoles();
+        } else showToast('error', 'Errore', d.message);
+    } catch(e) { showToast('error', 'Errore di rete', e.message); }
+}
+
+async function deleteRole(roleId, name) {
+    if (!confirm(`Eliminare il ruolo "${name}"?\nI membri con questo ruolo verranno impostati a "Membro" base.`)) return;
+    try {
+        const r = await fetch(`/api/orgs/${ORG_ID}/roles/${roleId}`, { method: 'DELETE' });
+        const d = await r.json();
+        if (d.success) { showToast('success', 'Ruolo eliminato', name); await loadRoles(); await loadMembers(); }
+        else showToast('error', 'Errore', d.message);
+    } catch(e) { showToast('error', 'Errore di rete', e.message); }
+}
+
+// ===== ACTIVITY =====
+async function loadActivity() {
+    try {
+        const r = await fetch(`/api/orgs/${ORG_ID}/stats`);
+        const d = await r.json();
+        if (!d.success) return;
+        const list = document.getElementById('activityList');
+        if (!d.recent_activity?.length) {
+            list.innerHTML = `<div style="text-align:center;padding:40px;color:var(--iris-text-muted);">
+                <i class="bi bi-clock-history" style="font-size:2rem;display:block;margin-bottom:10px;opacity:0.4;"></i>Nessuna attività recente
+            </div>`;
+            return;
+        }
+        const actionIcons = { upload_file: ['bi-cloud-upload-fill','success'], delete_file: ['bi-trash-fill','danger'],
+            create_folder: ['bi-folder-plus-fill','accent'], delete_folder: ['bi-folder-x-fill','danger'],
+            unlock_folder: ['bi-unlock-fill','warning'], login: ['bi-person-fill','info'] };
+        list.innerHTML = d.recent_activity.map(a => {
+            const [icon, color] = actionIcons[a.action] || ['bi-activity','info'];
+            const dt = new Date(a.timestamp).toLocaleString('it-IT', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+            return `<div class="activity-item">
+                <div class="activity-icon" style="background:rgba(99,102,241,0.1);color:var(--iris-accent);"><i class="bi ${icon}"></i></div>
+                <div class="activity-text"><strong>${escHtml(a.action.replace(/_/g,' '))}</strong>${a.details ? ': ' + escHtml(a.details) : ''}</div>
+                <div class="activity-time">${dt}</div>
+            </div>`;
+        }).join('');
+    } catch(e) { console.error(e); }
+}
+
+// ===== KEYBOARD =====
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        closeEditMemberModal(); closeRoleModal(); closeSidebar();
+    }
+});
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', async () => {
+    await Promise.all([loadStats(), loadMembers(), loadRoles()]);
+    initSocketPresence();
+});
+</script>
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+</body>
+</html>
+
+
+

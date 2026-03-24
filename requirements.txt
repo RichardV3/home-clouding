@@ -2,6 +2,7 @@ Flask==3.0.3
 Flask-SQLAlchemy==3.1.1
 Flask-Limiter==3.5.0
 Flask-Caching==2.3.0
+Flask-SocketIO>=5.3.6
 cryptography==42.0.8
 werkzeug==3.0.3
 requests==2.32.3
@@ -10,3 +11,5 @@ SQLAlchemy==2.0.35
 python-dotenv==1.0.1
 gunicorn==22.0.0
 pyftpdlib==1.5.9
+psutil>=5.9.0
+eventlet>=0.35.0

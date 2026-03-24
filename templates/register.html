@@ -573,6 +573,41 @@
 
                 <!-- ===== STEP 1: Account ===== -->
                 <div class="form-step active" id="step1">
+
+                    <!-- Dati personali -->
+                    <div class="section-divider">Dati personali</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div class="input-wrapper" style="margin-bottom:0;">
+                            <label for="first_name">Nome <span style="color:var(--iris-text-muted);font-weight:400;">(opz.)</span></label>
+                            <i class="bi bi-person-badge input-icon"></i>
+                            <input type="text" id="first_name" name="first_name"
+                                   class="iris-input input-with-icon"
+                                   placeholder="Mario"
+                                   value="{{ form_data.first_name if form_data else '' }}"
+                                   autocomplete="given-name" maxlength="100">
+                        </div>
+                        <div class="input-wrapper" style="margin-bottom:0;">
+                            <label for="last_name">Cognome <span style="color:var(--iris-text-muted);font-weight:400;">(opz.)</span></label>
+                            <i class="bi bi-person-badge-fill input-icon"></i>
+                            <input type="text" id="last_name" name="last_name"
+                                   class="iris-input input-with-icon"
+                                   placeholder="Rossi"
+                                   value="{{ form_data.last_name if form_data else '' }}"
+                                   autocomplete="family-name" maxlength="100">
+                        </div>
+                    </div>
+                    <div class="input-wrapper" style="margin-top:12px;">
+                        <label for="phone">Telefono <span style="color:var(--iris-text-muted);font-weight:400;">(opzionale)</span></label>
+                        <i class="bi bi-telephone input-icon"></i>
+                        <input type="tel" id="phone" name="phone"
+                               class="iris-input input-with-icon"
+                               placeholder="+39 000 000 0000"
+                               value="{{ form_data.phone if form_data else '' }}"
+                               autocomplete="tel" maxlength="20">
+                    </div>
+
+                    <div class="section-divider">Credenziali di accesso</div>
+
                     <div class="input-wrapper">
                         <label for="username">Username</label>
                         <i class="bi bi-person input-icon"></i>
@@ -1164,11 +1199,30 @@
     // SUMMARY
     // ===========================
     function buildSummary() {
-        const username = document.getElementById('username').value.trim();
-        const email    = document.getElementById('email').value.trim();
+        const username  = document.getElementById('username').value.trim();
+        const email     = document.getElementById('email').value.trim();
+        const firstName = document.getElementById('first_name')?.value.trim() || '';
+        const lastName  = document.getElementById('last_name')?.value.trim() || '';
+        const phone     = document.getElementById('phone')?.value.trim() || '';
+        const fullName  = [firstName, lastName].filter(Boolean).join(' ');
 
         let rows = `
-            <div style="display:flex;flex-direction:column;gap:10px;padding:4px 0 8px;">
+            <div style="display:flex;flex-direction:column;gap:10px;padding:4px 0 8px;">`;
+
+        if (fullName) {
+            rows += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.875rem;">
+                <span style="color:var(--iris-text-muted);">Nome</span>
+                <span style="font-weight:700;color:var(--iris-text-primary);">${escHtml(fullName)}</span>
+            </div>`;
+        }
+        if (phone) {
+            rows += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.875rem;">
+                <span style="color:var(--iris-text-muted);">Telefono</span>
+                <span style="font-weight:600;color:var(--iris-text-primary);">${escHtml(phone)}</span>
+            </div>`;
+        }
+
+        rows += `
                 <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.875rem;">
                     <span style="color:var(--iris-text-muted);">Username</span>
                     <span style="font-weight:700;color:var(--iris-text-primary);">${escHtml(username)}</span>

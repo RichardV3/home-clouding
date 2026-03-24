@@ -875,6 +875,17 @@ body {
     100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(99,102,241,0); }
 }
 
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+@keyframes iris-spin {
+    to { transform: rotate(360deg); }
+}
+@keyframes pulse {
+    from { opacity: 0.6; }
+    to   { opacity: 1; }
+}
+
 .iris-animate-in { animation: iris-fade-in 0.4s var(--iris-ease) forwards; }
 
 /* Staggered children animation */
@@ -992,3 +1003,201 @@ body {
 /* Smooth disk progress bar color based on usage */
 .iris-progress-bar.warning { background: linear-gradient(90deg, var(--iris-warning), #f97316); }
 .iris-progress-bar.danger  { background: linear-gradient(90deg, var(--iris-danger), #dc2626); }
+
+/* --------------------------------------------------------------------------
+   22. Mobile & Responsive — Comprehensive Improvements
+   -------------------------------------------------------------------------- */
+
+/* ----- Sidebar Backdrop Overlay (mobile) ----- */
+.sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    z-index: 49;
+    cursor: pointer;
+    animation: iris-fade-backdrop 0.25s var(--iris-ease);
+}
+.sidebar-backdrop.active { display: block; }
+@keyframes iris-fade-backdrop {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* ----- Touch devices: always show file/folder/enc-file actions ----- */
+@media (hover: none) and (pointer: coarse) {
+    .file-actions,
+    .folder-card-actions,
+    .enc-file-actions {
+        opacity: 1 !important;
+    }
+    .folder-card:hover { transform: none; }
+    .file-row:hover    { transform: none; }
+    .enc-file-card:hover { transform: none; }
+    .glass-card:hover  { transform: none; }
+}
+
+/* ----- Extra Small screens (< 480px) ----- */
+@media (max-width: 480px) {
+    /* Navbar */
+    .iris-navbar { padding: 10px 12px; }
+    .iris-navbar-brand { font-size: 1rem; gap: 8px; }
+    .iris-navbar-brand .brand-icon { width: 30px; height: 30px; font-size: 0.85rem; }
+    .iris-theme-toggle { width: 36px; height: 36px; font-size: 0.95rem; }
+
+    /* Modal */
+    .iris-modal-overlay { padding: 12px; align-items: flex-end; }
+    .iris-modal {
+        padding: 20px 16px;
+        border-radius: var(--iris-radius-lg) var(--iris-radius-lg) 0 0;
+        max-width: 100%;
+        animation: iris-modal-slide-up 0.3s var(--iris-ease-spring);
+    }
+    @keyframes iris-modal-slide-up {
+        from { opacity: 0; transform: translateY(30px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .iris-modal-title { font-size: 1.0625rem; }
+
+    /* Toasts */
+    .iris-toast-container { bottom: 12px; right: 12px; left: 12px; }
+    .iris-toast { min-width: unset; width: 100%; }
+
+    /* Upload zone */
+    .iris-upload-zone { padding: 28px 16px; }
+    .iris-upload-icon { width: 48px; height: 48px; font-size: 1.5rem; margin-bottom: 12px; }
+
+    /* Empty state */
+    .iris-empty-state { padding: 40px 16px; }
+    .iris-empty-icon { width: 64px; height: 64px; font-size: 1.75rem; margin-bottom: 14px; }
+
+    /* Buttons */
+    .btn-iris { padding: 8px 14px; font-size: 0.8125rem; }
+    .btn-iris-sm { padding: 6px 10px; font-size: 0.75rem; }
+}
+
+/* ----- Small screens (< 576px) ----- */
+@media (max-width: 576px) {
+    /* Topbar title overflow */
+    .topbar-title {
+        font-size: 0.9375rem !important;
+        max-width: 160px;
+    }
+
+    /* Page header stacks on mobile */
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 12px;
+    }
+    .page-header > div:last-child,
+    .page-header > button:last-child,
+    .page-header > .btn-iris,
+    .page-header > div[style*="display:flex"] {
+        width: 100%;
+    }
+    .page-header > div[style*="display:flex"] button {
+        flex: 1;
+    }
+    .page-header .btn-iris-primary {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Sidebar stats grid */
+    .sidebar-stats { gap: 6px; }
+    .stat-mini-val { font-size: 1.05rem; }
+
+    /* Folder grid: 2 columns on small, 1 on very small */
+    .folders-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+
+    /* Enc files grid */
+    .enc-files-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+}
+
+@media (max-width: 360px) {
+    .folders-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .enc-files-grid { grid-template-columns: 1fr; }
+}
+
+/* ----- Tablet (769px – 1024px) ----- */
+@media (min-width: 769px) and (max-width: 1024px) {
+    /* Slightly narrower sidebar on tablet */
+    .sidebar { width: 240px; }
+    .main-content { margin-left: 240px !important; }
+
+    /* Topbar search slightly narrower */
+    .topbar-search { width: 180px; }
+
+    /* Content area less padding */
+    .content-area { padding: 20px; }
+}
+
+/* ----- Tables: always horizontally scrollable on mobile ----- */
+@media (max-width: 768px) {
+    .doc-content table,
+    .zip-table-wrapper { overflow-x: auto; display: block; -webkit-overflow-scrolling: touch; }
+    .zip-table { min-width: 320px; }
+
+    /* Preview modal full screen on mobile */
+    .preview-modal {
+        max-height: 95vh;
+        border-radius: var(--iris-radius-lg);
+    }
+    .preview-overlay { padding: 12px; }
+
+    /* Lock card */
+    .lock-card { padding: 28px 20px; }
+
+    /* Folder header inner: always stacked */
+    .folder-header-inner { flex-direction: column; align-items: flex-start; gap: 14px; }
+
+    /* enc files grid: single column on mobile */
+    .enc-files-grid { grid-template-columns: 1fr; }
+
+    /* Sidebar disk / network sections: reduce padding */
+    .sidebar-disk,
+    .sidebar-network { padding: 8px 12px 12px; }
+    .sidebar-stats { padding: 10px; }
+
+    /* Topbar: compact actions gap */
+    .topbar { gap: 8px; }
+
+    /* topbar-search on mobile: expandable mini button  */
+    .topbar-search-mobile-toggle {
+        display: flex;
+        width: 36px; height: 36px;
+        background: var(--iris-bg-card);
+        border: 1px solid var(--iris-border);
+        border-radius: var(--iris-radius-md);
+        align-items: center; justify-content: center;
+        cursor: pointer;
+        color: var(--iris-text-secondary);
+        font-size: 0.95rem;
+        flex-shrink: 0;
+    }
+    .topbar-search-panel {
+        position: absolute;
+        top: 100%;
+        left: 0; right: 0;
+        padding: 10px 14px;
+        background: rgba(10,14,26,0.95);
+        backdrop-filter: var(--iris-blur);
+        border-bottom: 1px solid var(--iris-border);
+        display: none;
+        z-index: 39;
+    }
+    [data-theme="light"] .topbar-search-panel { background: rgba(238,242,255,0.97); }
+    .topbar-search-panel.open { display: block; }
+    .topbar-search-panel input { width: 100%; }
+}
+
+/* Sidebar backdrop NOT shown on desktop */
+@media (min-width: 769px) {
+    .sidebar-backdrop { display: none !important; }
+    .topbar-search-mobile-toggle { display: none !important; }
+    .topbar-search-panel { display: none !important; }
+}
+

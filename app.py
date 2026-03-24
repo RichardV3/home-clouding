@@ -2094,14 +2094,14 @@ def _get_folder_users(folder_id, exclude_sid=None):
 
 
 @socketio.on('connect')
-def handle_ws_connect():
+def handle_ws_connect(auth=None):
     user_id = session.get('user_id')
     if not user_id:
         return False  # reject unauthenticated
     user = User.query.get(user_id)
     if not user:
         return False
-    from flask_socketio import request as sio_req
+    from flask import request as sio_req
     online_users[sio_req.sid] = {
         'user_id': user.id,
         'username': user.username,
@@ -2117,7 +2117,7 @@ def handle_ws_connect():
 
 @socketio.on('disconnect')
 def handle_ws_disconnect():
-    from flask_socketio import request as sio_req
+    from flask import request as sio_req
     info = online_users.pop(sio_req.sid, None)
     if info and info.get('folder_id'):
         fid = info['folder_id']
@@ -2129,7 +2129,7 @@ def handle_ws_disconnect():
 
 @socketio.on('join_folder')
 def handle_join_folder(data):
-    from flask_socketio import request as sio_req
+    from flask import request as sio_req
     folder_id = data.get('folder_id')
     sid = sio_req.sid
     if sid not in online_users:
@@ -2150,7 +2150,7 @@ def handle_join_folder(data):
 
 @socketio.on('leave_folder')
 def handle_leave_folder(data):
-    from flask_socketio import request as sio_req
+    from flask import request as sio_req
     folder_id = data.get('folder_id')
     sid = sio_req.sid
     if sid not in online_users or not folder_id:

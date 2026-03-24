@@ -1,7 +1,8 @@
 -- ============================================================================
--- IRIS-VE v3.1 Database Setup Script
--- Multi-user Cloud Storage with Organizations, Workspaces, Custom Roles & Multi-disk
--- Versione: 3.1.0 — Data: 2026-03-24
+-- IRIS-VE v4.0 Database Setup Script
+-- Multi-user Cloud Storage with Organizations, Workspaces, Custom Roles,
+-- Multi-disk, Sottocartelle e Ordinamento Drag&Drop per utente
+-- Versione: 4.0.0 — Data: 2026-03-24
 -- ============================================================================
 
 -- Creazione database (se non esiste)
@@ -124,7 +125,7 @@ CREATE TABLE IF NOT EXISTS storage_config (
 -- TABELLE STORAGE (CARTELLE E FILE)
 -- ============================================================================
 
--- Cartelle normali e cifrate
+-- Cartelle normali e cifrate (con supporto sottocartelle via parent_id)
 CREATE TABLE IF NOT EXISTS folders (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -134,17 +135,20 @@ CREATE TABLE IF NOT EXISTS folders (
     password_hash VARCHAR(255),
     salt VARCHAR(255),
     workspace_id INT NULL DEFAULT NULL,       -- NULL = cartella personale
+    parent_id    INT NULL DEFAULT NULL,       -- NULL = cartella root; altrimenti = sottocartella
     created_by_id INT NULL DEFAULT NULL,      -- NULL = legacy (prima della v3.0)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     INDEX ix_folders_name (name),
     INDEX ix_folders_workspace_id (workspace_id),
+    INDEX ix_folders_parent_id (parent_id),
     INDEX ix_folders_created_by_id (created_by_id),
     INDEX ix_folders_created_at (created_at DESC),
 
     CONSTRAINT fk_folder_workspace FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE SET NULL,
-    CONSTRAINT fk_folder_creator FOREIGN KEY (created_by_id) REFERENCES users(id) ON DELETE SET NULL
+    CONSTRAINT fk_folder_creator   FOREIGN KEY (created_by_id) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_folder_parent    FOREIGN KEY (parent_id)     REFERENCES folders(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- File caricati
@@ -168,6 +172,23 @@ CREATE TABLE IF NOT EXISTS files (
 
     CONSTRAINT fk_file_folder FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT fk_file_uploader FOREIGN KEY (uploaded_by_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Ordine drag&drop cartelle per utente (v4.0)
+CREATE TABLE IF NOT EXISTS folder_orders (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    user_id        INT NOT NULL,
+    workspace_id   INT NULL DEFAULT NULL,  -- NULL = spazio personale
+    folder_id      INT NOT NULL,
+    position       INT NOT NULL DEFAULT 0,
+
+    UNIQUE KEY uq_user_ws_folder (user_id, workspace_id, folder_id),
+    INDEX ix_fo_user_ws (user_id, workspace_id),
+    INDEX ix_fo_folder  (folder_id),
+
+    CONSTRAINT fk_fo_user   FOREIGN KEY (user_id)      REFERENCES users(id)      ON DELETE CASCADE,
+    CONSTRAINT fk_fo_ws     FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+    CONSTRAINT fk_fo_folder FOREIGN KEY (folder_id)    REFERENCES folders(id)    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
@@ -333,9 +354,9 @@ WHERE TABLE_SCHEMA = DATABASE()
 ORDER BY TABLE_NAME;
 
 SELECT
-    'Database IRIS-VE v3.1 configurato con successo!' AS message,
+    'Database IRIS-VE v4.0 configurato con successo!' AS message,
     NOW() AS timestamp,
     DATABASE() AS current_database,
     @@version AS mysql_version;
 
-SELECT '✅ Installazione IRIS-VE v3.1 completata!' AS final_status;
+SELECT '✅ Installazione IRIS-VE v4.0 completata!' AS final_status;

@@ -741,7 +741,7 @@
 
             <!-- FOLDER VIEW -->
             <div id="folderView" style="display:none;">
-                <nav class="iris-breadcrumb">
+                <nav class="iris-breadcrumb" id="folderBreadcrumb">
                     <a href="#" onclick="showDashboard()"><i class="bi bi-grid-3x3-gap me-1"></i>Dashboard</a>
                     <span class="iris-breadcrumb-sep"><i class="bi bi-chevron-right"></i></span>
                     <span class="iris-breadcrumb-current" id="breadcrumbFolder"></span>
@@ -791,6 +791,35 @@
                     <div class="skeleton file-skeleton"></div>
                     <div class="skeleton file-skeleton"></div>
                 </div>
+
+                <!-- Sottocartelle -->
+                <div class="subfolder-section" id="subfolderSection" style="display:none;">
+                    <div class="subfolder-section-header">
+                        <span class="subfolder-label"><i class="bi bi-diagram-2-fill"></i> Sottocartelle</span>
+                        <button class="btn-iris btn-iris-ghost btn-iris-sm perm-hidden" id="newSubfolderBtn" onclick="openCreateSubfolderModal()">
+                            <i class="bi bi-folder-plus"></i> Nuova sottocartella
+                        </button>
+                    </div>
+                    <div class="subfolder-grid iris-stagger" id="subfolderGrid"></div>
+                </div>
+
+                <!-- Filter bar -->
+                <div class="file-filter-bar" id="fileFilterBar" style="display:none;">
+                    <span class="filter-lbl"><i class="bi bi-sort-down me-1"></i>Ordina:</span>
+                    <button class="filter-btn active" id="filterDate" onclick="setFilter('date')">
+                        <i class="bi bi-calendar3"></i> Data <i class="bi bi-arrow-down" id="filterDateArrow"></i>
+                    </button>
+                    <button class="filter-btn" id="filterName" onclick="setFilter('name')">
+                        <i class="bi bi-fonts"></i> Nome <i class="bi bi-arrow-down" id="filterNameArrow" style="display:none;"></i>
+                    </button>
+                    <button class="filter-btn" id="filterSize" onclick="setFilter('size')">
+                        <i class="bi bi-database"></i> Dimensione <i class="bi bi-arrow-down" id="filterSizeArrow" style="display:none;"></i>
+                    </button>
+                    <button class="filter-btn" id="filterCreator" onclick="setFilter('creator')">
+                        <i class="bi bi-person"></i> Creatore <i class="bi bi-arrow-down" id="filterCreatorArrow" style="display:none;"></i>
+                    </button>
+                </div>
+
                 <div class="file-list iris-stagger" id="fileList" style="display:none;"></div>
                 <div class="iris-empty-state" id="emptyFiles" style="display:none;">
                     <div class="iris-empty-icon"><i class="bi bi-file-earmark-x"></i></div>
@@ -892,6 +921,31 @@
     </div>
 </div>
 
+<!-- ===== MODAL CREATE SUBFOLDER ===== -->
+<div class="iris-modal-overlay" id="subfolderModal" style="display:none;" onclick="if(event.target===this)closeSubfolderModal()">
+    <div class="iris-modal" onclick="event.stopPropagation()">
+        <div class="iris-modal-header">
+            <span class="iris-modal-title"><i class="bi bi-diagram-2-fill me-2" style="color:var(--iris-accent);"></i>Nuova Sottocartella</span>
+            <button class="iris-modal-close" onclick="closeSubfolderModal()"><i class="bi bi-x"></i></button>
+        </div>
+        <div id="subfolderParentInfo" style="font-size:0.8rem;color:var(--iris-text-muted);margin-bottom:14px;padding:8px 12px;background:rgba(99,102,241,0.07);border-radius:var(--iris-radius-sm);border:1px solid rgba(99,102,241,0.15);">
+            <i class="bi bi-folder-fill me-1" style="color:var(--iris-accent);"></i><span id="subfolderParentName">Cartella</span>
+        </div>
+        <div class="iris-input-group">
+            <label>Nome sottocartella *</label>
+            <input type="text" id="newSubfolderName" class="iris-input" placeholder="Es. Archivio 2024" maxlength="255">
+        </div>
+        <div class="iris-input-group">
+            <label>Descrizione (opzionale)</label>
+            <input type="text" id="newSubfolderDesc" class="iris-input" placeholder="Breve descrizione…" maxlength="500">
+        </div>
+        <div style="display:flex;gap:10px;margin-top:8px;">
+            <button class="btn-iris btn-iris-ghost" style="flex:1;" onclick="closeSubfolderModal()">Annulla</button>
+            <button class="btn-iris btn-iris-primary" style="flex:2;" onclick="createSubfolder()"><i class="bi bi-plus-lg"></i> Crea</button>
+        </div>
+    </div>
+</div>
+
 <!-- ===== TOAST CONTAINER ===== -->
 <div class="iris-toast-container" id="toastContainer"></div>
 
@@ -924,6 +978,37 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<style>
+/* ===== DRAG & DROP ===== */
+.folder-card-ghost { opacity: 0.35 !important; border: 2px dashed var(--iris-accent) !important; background: rgba(99,102,241,0.08) !important; }
+.folder-card-chosen { transform: scale(1.03); box-shadow: 0 16px 48px rgba(99,102,241,0.25) !important; z-index: 10; }
+.folder-card-drag { opacity: 0.9; }
+.drag-handle { cursor: grab; color: var(--iris-text-muted); padding: 2px 4px; border-radius: 4px; font-size: 0.85rem; transition: color 0.2s; position: absolute; top: 10px; left: 10px; opacity: 0; }
+.folder-card:hover .drag-handle { opacity: 1; }
+.drag-handle:hover { color: var(--iris-accent); }
+/* ===== SOTTOCARTELLE ===== */
+.subfolder-section { margin-bottom: 20px; }
+.subfolder-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--iris-border); }
+.subfolder-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--iris-text-muted); display: flex; align-items: center; gap: 6px; }
+.subfolder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.subfolder-card { background: var(--iris-bg-card); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-md); padding: 12px 14px; cursor: pointer; transition: var(--iris-transition); display: flex; align-items: center; gap: 10px; position: relative; overflow: hidden; }
+.subfolder-card:hover { background: var(--iris-bg-card-hover); border-color: rgba(99,102,241,0.3); transform: translateX(3px); }
+.subfolder-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--iris-accent-grad); }
+.subfolder-card-name { font-size: 0.8125rem; font-weight: 600; color: var(--iris-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.subfolder-card-meta { font-size: 0.7rem; color: var(--iris-text-muted); }
+.subfolder-card-actions { display: flex; gap: 3px; opacity: 0; transition: opacity 0.2s; flex-shrink: 0; }
+.subfolder-card:hover .subfolder-card-actions { opacity: 1; }
+/* ===== FILTER BAR ===== */
+.file-filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.filter-btn { display: flex; align-items: center; gap: 5px; padding: 5px 12px; background: var(--iris-bg-card); border: 1px solid var(--iris-border); border-radius: var(--iris-radius-pill); font-size: 0.8rem; font-weight: 600; color: var(--iris-text-secondary); cursor: pointer; transition: var(--iris-transition); user-select: none; }
+.filter-btn:hover { background: var(--iris-bg-card-hover); color: var(--iris-text-primary); }
+.filter-btn.active { color: var(--iris-accent); background: rgba(99,102,241,0.1); border-color: rgba(99,102,241,0.35); }
+.filter-btn i { font-size: 0.8rem; }
+.filter-lbl { font-size: 0.75rem; color: var(--iris-text-muted); margin-right: 2px; }
+/* Breadcrumb aggiornato per sottocartelle */
+.iris-breadcrumb { flex-wrap: wrap; }
+</style>
 <script>
 // =====================================================================
 // THEME
@@ -993,14 +1078,19 @@ function removeToast(t) {
 }
 
 // =====================================================================
-// STATE
+// STATE v4.0
 // =====================================================================
 let currentFolderId = null;
 let currentFolderName = '';
 let allFolders = [];
 let allFiles = [];
+let allSubFolders = [];
 let activeWorkspaceId = {% if active_workspace %}{{ active_workspace }}{% else %}null{% endif %};
 let activeWorkspaceName = {{ (active_org.name|tojson) if active_org else 'null' }};
+let currentSortBy = 'date';
+let currentSortDir = 'desc';
+let folderStack = [];
+let _sortableInstance = null;
 
 // =====================================================================
 // PERMISSIONS
@@ -1009,22 +1099,20 @@ const USER_PERMS = new Set({{ user_permissions | tojson }});
 function can(perm) { return USER_PERMS.has(perm); }
 
 function applyPermissions() {
-    // "Nuova Cartella" buttons
     const canCreate = can('create_folders');
     ['createFolderHeaderBtn', 'sidebarCreateFolderLink'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.toggle('perm-hidden', !canCreate);
     });
-    // Upload zone (applies when in folder view)
     const uploadWrap = document.getElementById('uploadZoneWrapper');
     if (uploadWrap) uploadWrap.classList.toggle('perm-hidden', !can('upload_files'));
-    // Upload sidebar trigger
     const uTrig = document.getElementById('uploadTriggerBtn');
     if (uTrig && uTrig.style.display !== 'none')
         uTrig.classList.toggle('perm-hidden', !can('upload_files'));
-    // Upload header button
     const uHead = document.getElementById('uploadHeaderBtn');
     if (uHead) uHead.classList.toggle('perm-hidden', !can('upload_files'));
+    const nsb = document.getElementById('newSubfolderBtn');
+    if (nsb) nsb.classList.toggle('perm-hidden', !canCreate);
 }
 
 // =====================================================================
@@ -1037,44 +1125,25 @@ document.addEventListener('DOMContentLoaded', () => {
     {% else %}
         loadDashboard();
     {% endif %}
-    loadStats();
-    loadDiskInfo();
-    loadNetworkInfo();
+    loadStats(); loadDiskInfo(); loadNetworkInfo();
 });
 
 // =====================================================================
 // WORKSPACE SWITCHER
 // =====================================================================
 function switchWorkspace(wsId, wsName) {
-    activeWorkspaceId = wsId;
-    activeWorkspaceName = wsName || null;
-
-    // Update active state on buttons
-    document.querySelectorAll('.workspace-link').forEach(btn => btn.classList.remove('active'));
-    const activeBtn = wsId ? document.getElementById('ws' + wsId) : document.getElementById('wsPersonal');
-    if (activeBtn) activeBtn.classList.add('active');
-
-    // Navigate to appropriate URL
-    if (wsId) {
-        window.location.href = '/workspace/' + wsId;
-    } else {
-        window.location.href = '/dashboard';
-    }
+    activeWorkspaceId = wsId; activeWorkspaceName = wsName || null;
+    document.querySelectorAll('.workspace-link').forEach(b => b.classList.remove('active'));
+    const ab = wsId ? document.getElementById('ws'+wsId) : document.getElementById('wsPersonal');
+    if (ab) ab.classList.add('active');
+    window.location.href = wsId ? '/workspace/'+wsId : '/dashboard';
 }
-
 function copyOrgCode(code, btn) {
     navigator.clipboard.writeText(code).then(() => {
-        const icon = btn.querySelector('i');
-        icon.className = 'bi bi-check';
-        btn.style.color = 'var(--iris-success)';
-        showToast('success', 'Copiato!', `Codice ${code} copiato negli appunti`);
-        setTimeout(() => {
-            icon.className = 'bi bi-copy';
-            btn.style.color = '';
-        }, 2000);
-    }).catch(() => {
-        showToast('error', 'Errore', 'Impossibile copiare il codice');
-    });
+        const icon = btn.querySelector('i'); icon.className = 'bi bi-check'; btn.style.color = 'var(--iris-success)';
+        showToast('success', 'Copiato!', `Codice ${code} copiato`);
+        setTimeout(() => { icon.className = 'bi bi-copy'; btn.style.color = ''; }, 2000);
+    }).catch(() => showToast('error', 'Errore', 'Impossibile copiare'));
 }
 
 // =====================================================================
@@ -1086,15 +1155,20 @@ async function loadDashboard() {
     document.getElementById('foldersGrid').style.display = 'none';
     document.getElementById('emptyFolders').style.display = 'none';
     try {
-        const url = activeWorkspaceId
-            ? `/api/folders?workspace_id=${activeWorkspaceId}`
-            : '/api/folders';
-        const res = await fetch(url);
-        if (res.status === 401) { window.location.href = '/login'; return; }
-        if (!res.ok) throw new Error('Server error');
-        allFolders = await res.json();
+        const url = activeWorkspaceId ? `/api/folders?workspace_id=${activeWorkspaceId}` : '/api/folders';
+        const [fRes, oRes] = await Promise.all([
+            fetch(url),
+            fetch(`/api/folders/order${activeWorkspaceId ? '?workspace_id='+activeWorkspaceId : ''}`)
+        ]);
+        if (fRes.status === 401) { window.location.href = '/login'; return; }
+        const raw = await fRes.json();
+        let orderMap = {};
+        if (oRes.ok) { const od = await oRes.json(); (od.order||[]).forEach(o => orderMap[o.folder_id]=o.position); }
+        allFolders = raw.filter(f => !f.parent_id);
+        allFolders.forEach(f => f._position = orderMap[f.id] ?? 9999);
+        allFolders.sort((a,b) => a._position - b._position || new Date(a.created_at)-new Date(b.created_at));
         renderFolders(allFolders);
-    } catch (e) {
+    } catch(e) {
         showToast('error', 'Errore', 'Impossibile caricare le cartelle');
         document.getElementById('skeletonFolders').style.display = 'none';
     }
@@ -1104,62 +1178,73 @@ function renderFolders(folders) {
     document.getElementById('skeletonFolders').style.display = 'none';
     const grid = document.getElementById('foldersGrid');
     const empty = document.getElementById('emptyFolders');
-    document.getElementById('folderCountLabel').textContent = `${folders.length} cartell${folders.length === 1 ? 'a' : 'e'}`;
-    if (!folders.length) { grid.style.display = 'none'; empty.style.display = 'block'; return; }
-    grid.style.display = 'grid'; empty.style.display = 'none';
+    document.getElementById('folderCountLabel').textContent = `${folders.length} cartell${folders.length===1?'a':'e'}`;
+    if (!folders.length) { grid.style.display='none'; empty.style.display='block'; return; }
+    grid.style.display='grid'; empty.style.display='none';
     grid.innerHTML = folders.map(f => {
         const enc = f.is_encrypted;
-        const icon = enc ? 'bi-folder-lock' : (f.icon || 'bi-folder-fill');
+        const icon = enc ? 'bi-folder-lock' : (f.icon||'bi-folder-fill');
         const dt = new Date(f.created_at);
-        const dateStr = dt.toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'numeric'});
-        const timeStr = dt.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+        const dateStr = dt.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+        const timeStr = dt.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
         const creator = f.created_by_display || f.created_by_username || '';
+        const hasChildren = (f.children_count||0) > 0;
         const delBtn = can('delete_folders')
-            ? `<button class="card-del-btn" data-delete-id="${f.id}" title="Elimina"><i class="bi bi-trash3"></i></button>`
-            : '';
+            ? `<button class="card-del-btn" data-delete-id="${f.id}" title="Elimina"><i class="bi bi-trash3"></i></button>` : '';
         return `<div class="folder-card" data-folder-id="${f.id}">
+            <i class="bi bi-grip-vertical drag-handle" title="Trascina per riordinare"></i>
             <div class="folder-card-actions">
                 <button class="card-edit-btn" data-edit-id="${f.id}" title="Modifica"><i class="bi bi-pencil"></i></button>
                 ${delBtn}
             </div>
-            <div class="folder-card-icon-wrap ${enc?'folder-icon-encrypt':'folder-icon-normal'}">
-                <i class="bi ${icon}"></i>
-            </div>
+            <div class="folder-card-icon-wrap ${enc?'folder-icon-encrypt':'folder-icon-normal'}"><i class="bi ${icon}"></i></div>
             <div class="folder-card-name">${escapeHtml(f.name)}</div>
             <div class="folder-card-meta">
                 <span class="iris-badge iris-badge-neutral">${f.files_count||0} file</span>
+                ${hasChildren?`<span class="iris-badge iris-badge-neutral"><i class="bi bi-diagram-2 me-1"></i>${f.children_count}</span>`:''}
                 ${enc?'<span class="iris-badge iris-badge-accent"><i class="bi bi-lock-fill me-1"></i>Cifrata</span>':''}
             </div>
             ${f.description?`<div class="folder-card-desc">${escapeHtml(f.description)}</div>`:''}
-            <div class="folder-card-datetime">
-                <i class="bi bi-clock"></i>${dateStr} ${timeStr}
-                ${creator ? `<i class="bi bi-person ms-1"></i>${escapeHtml(creator)}` : ''}
-            </div>
+            <div class="folder-card-datetime"><i class="bi bi-clock"></i>${dateStr} ${timeStr}${creator?`<i class="bi bi-person ms-1"></i>${escapeHtml(creator)}`:''}</div>
         </div>`;
     }).join('');
-
-    // Attach click handlers via event delegation (safe: uses data attributes, not inline JS)
     grid.querySelectorAll('.folder-card').forEach(card => {
-        const fid = parseInt(card.dataset.folderId, 10);
-        const folder = folders.find(f => f.id === fid);
-        card.addEventListener('click', (e) => {
-            if (e.target.closest('[data-delete-id]') || e.target.closest('[data-edit-id]')) return;
-            openFolder(fid, folder ? folder.name : '');
+        const fid = parseInt(card.dataset.folderId,10);
+        const folder = folders.find(f => f.id===fid);
+        card.addEventListener('click', e => {
+            if (e.target.closest('[data-delete-id]')||e.target.closest('[data-edit-id]')||e.target.closest('.drag-handle')) return;
+            openFolder(fid, folder?folder.name:'');
         });
     });
-    grid.querySelectorAll('[data-delete-id]').forEach(btn => {
-        const fid = parseInt(btn.dataset.deleteId, 10);
-        btn.addEventListener('click', (e) => { e.stopPropagation(); deleteFolder(fid, e); });
-    });
-    grid.querySelectorAll('[data-edit-id]').forEach(btn => {
-        const fid = parseInt(btn.dataset.editId, 10);
-        btn.addEventListener('click', (e) => { e.stopPropagation(); openEditModal(fid); });
+    grid.querySelectorAll('[data-delete-id]').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); deleteFolder(parseInt(btn.dataset.deleteId),e); }));
+    grid.querySelectorAll('[data-edit-id]').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); openEditModal(parseInt(btn.dataset.editId)); }));
+    initSortable(grid);
+}
+
+function initSortable(grid) {
+    if (_sortableInstance) { _sortableInstance.destroy(); _sortableInstance = null; }
+    if (typeof Sortable === 'undefined') return;
+    _sortableInstance = Sortable.create(grid, {
+        animation: 150, handle: '.drag-handle',
+        ghostClass: 'folder-card-ghost', chosenClass: 'folder-card-chosen', dragClass: 'folder-card-drag',
+        onEnd: async () => {
+            const items = [...grid.querySelectorAll('.folder-card[data-folder-id]')];
+            const order = items.map((el,i) => ({ folder_id: parseInt(el.dataset.folderId,10), position: i }));
+            order.forEach(o => { const f=allFolders.find(x=>x.id===o.folder_id); if(f) f._position=o.position; });
+            try {
+                await fetch('/api/folders/order', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ workspace_id: activeWorkspaceId, order })
+                });
+                showToast('success', 'Ordine salvato', null, 1800);
+            } catch(e) { showToast('error', 'Errore', 'Impossibile salvare ordine'); }
+        }
     });
 }
 
 function showDashboard() {
     if (currentFolderId) wsEmit('leave_folder', { folder_id: currentFolderId });
-    currentFolderId = null;
+    currentFolderId = null; folderStack = [];
     document.getElementById('dashboardView').style.display = 'block';
     document.getElementById('folderView').style.display = 'none';
     document.getElementById('uploadTriggerBtn').style.display = 'none';
@@ -1171,125 +1256,214 @@ function showDashboard() {
 }
 
 function refreshAll() {
-    if (currentFolderId) { loadFiles(currentFolderId); } else { loadDashboard(); }
+    if (currentFolderId) loadFolderView(currentFolderId); else loadDashboard();
     loadStats(); loadDiskInfo();
 }
 
 // =====================================================================
-// FOLDER VIEW
+// FOLDER VIEW v4.0 — sottocartelle + breadcrumb
 // =====================================================================
-async function openFolder(folderId, folderName) {
-    const folder = allFolders.find(f => f.id === folderId);
-    if (folder && folder.is_encrypted) { window.location.href = `/folder/${folderId}`; return; }
-
-    if (currentFolderId && currentFolderId !== folderId)
+async function openFolder(folderId, folderName, pushStack=true) {
+    const folder = allFolders.find(f => f.id===folderId);
+    if (folder && folder.is_encrypted) { window.location.href=`/folder/${folderId}`; return; }
+    if (currentFolderId && currentFolderId !== folderId) {
         wsEmit('leave_folder', { folder_id: currentFolderId });
-
-    currentFolderId = folderId;
-    currentFolderName = folderName || 'Cartella';
+        if (pushStack) folderStack.push({ id: currentFolderId, name: currentFolderName });
+    }
+    currentFolderId = folderId; currentFolderName = folderName || 'Cartella';
     document.getElementById('dashboardView').style.display = 'none';
     document.getElementById('folderView').style.display = 'block';
-    // Upload buttons: visible only if user can upload
     const canUp = can('upload_files');
     document.getElementById('uploadTriggerBtn').style.display = canUp ? 'flex' : 'none';
-    const uHead = document.getElementById('uploadHeaderBtn');
-    if (uHead) uHead.style.display = canUp ? '' : 'none';
-    const uWrap = document.getElementById('uploadZoneWrapper');
-    if (uWrap) uWrap.style.display = canUp ? '' : 'none';
-
+    const uHead = document.getElementById('uploadHeaderBtn'); if(uHead) uHead.style.display = canUp?'':'none';
+    const uWrap = document.getElementById('uploadZoneWrapper'); if(uWrap) uWrap.style.display = canUp?'':'none';
     document.getElementById('folderViewTitle').textContent = currentFolderName;
-    document.getElementById('breadcrumbFolder').textContent = currentFolderName;
-    document.getElementById('topbarTitle').innerHTML = `<a href="#" onclick="showDashboard()">Dashboard</a> <span>/ ${escapeHtml(currentFolderName)}</span>`;
-
     wsEmit('join_folder', { folder_id: folderId });
-    await loadFiles(folderId);
+    updateBreadcrumb(folderId);
+    await loadFolderView(folderId);
+}
+
+async function loadFolderView(folderId) {
+    await Promise.all([ loadFiles(folderId), loadSubfolders(folderId) ]);
+}
+
+async function updateBreadcrumb(folderId) {
+    try {
+        const res = await fetch(`/api/folders/${folderId}/breadcrumb`);
+        const data = await res.json();
+        if (!data.success) return;
+        const crumbs = data.breadcrumb;
+        let html = `<a href="#" onclick="showDashboard()"><i class="bi bi-grid-3x3-gap me-1"></i>Dashboard</a>`;
+        crumbs.forEach((c,i) => {
+            html += `<span class="iris-breadcrumb-sep"><i class="bi bi-chevron-right"></i></span>`;
+            if (i < crumbs.length-1)
+                html += `<a href="#" onclick="navigateToCrumb(${c.id},'${escapeHtml(c.name)}')">${escapeHtml(c.name)}</a>`;
+            else html += `<span class="iris-breadcrumb-current">${escapeHtml(c.name)}</span>`;
+        });
+        document.getElementById('folderBreadcrumb').innerHTML = html;
+        document.getElementById('topbarTitle').innerHTML =
+            `<a href="#" onclick="showDashboard()">Dashboard</a> <span>/ ${escapeHtml(crumbs.map(c=>c.name).join(' / '))}</span>`;
+    } catch(e) { document.getElementById('breadcrumbFolder').textContent = currentFolderName; }
+}
+
+async function navigateToCrumb(folderId, folderName) {
+    const idx = folderStack.findIndex(s => s.id===folderId);
+    if (idx !== -1) folderStack = folderStack.slice(0,idx);
+    await openFolder(folderId, folderName, false);
+}
+
+// =====================================================================
+// SOTTOCARTELLE
+// =====================================================================
+async function loadSubfolders(folderId) {
+    try {
+        const res = await fetch(`/api/folders/${folderId}/children`);
+        if (!res.ok) return;
+        const data = await res.json();
+        allSubFolders = data.children || [];
+        renderSubfolders(allSubFolders);
+    } catch(e) { allSubFolders = []; document.getElementById('subfolderSection').style.display='none'; }
+}
+
+function renderSubfolders(subfolders) {
+    const section = document.getElementById('subfolderSection');
+    const grid = document.getElementById('subfolderGrid');
+    if (!subfolders.length) { section.style.display='none'; return; }
+    section.style.display='block';
+    grid.innerHTML = subfolders.map(f => {
+        const enc=f.is_encrypted; const icon=enc?'bi-folder-lock':(f.icon||'bi-folder-fill');
+        const delBtn = can('delete_folders')
+            ? `<button class="btn-iris btn-iris-danger btn-iris-icon btn-iris-sm" data-sub-delete="${f.id}"><i class="bi bi-trash3"></i></button>` : '';
+        return `<div class="subfolder-card" data-sub-id="${f.id}">
+            <i class="bi ${icon}" style="color:${enc?'var(--iris-accent)':'#f59e0b'};font-size:1.1rem;flex-shrink:0;"></i>
+            <div style="flex:1;min-width:0;">
+                <div class="subfolder-card-name">${escapeHtml(f.name)}</div>
+                <div class="subfolder-card-meta">${f.files_count||0} file${f.children_count?` · ${f.children_count} sub`:''}</div>
+            </div>
+            <div class="subfolder-card-actions">${delBtn}</div>
+        </div>`;
+    }).join('');
+    grid.querySelectorAll('.subfolder-card').forEach(card => {
+        const fid=parseInt(card.dataset.subId,10); const sf=subfolders.find(f=>f.id===fid);
+        card.addEventListener('click', e => { if(e.target.closest('[data-sub-delete]')) return; openFolder(fid, sf?sf.name:'Cartella'); });
+    });
+    grid.querySelectorAll('[data-sub-delete]').forEach(btn => btn.addEventListener('click', async e => {
+        e.stopPropagation(); const fid=parseInt(btn.dataset.subDelete,10);
+        const sf=subfolders.find(f=>f.id===fid);
+        if (!confirm(`Eliminare "${sf?sf.name:'sottocartella'}" e tutti i suoi file?`)) return;
+        const r=await fetch(`/api/folders/${fid}`,{method:'DELETE'});
+        const d=await r.json();
+        if(d.success){ allSubFolders=allSubFolders.filter(f=>f.id!==fid); renderSubfolders(allSubFolders); showToast('success','Eliminata',null); }
+        else showToast('error','Errore',d.message);
+    }));
+}
+
+function openCreateSubfolderModal() {
+    if (!can('create_folders')) { showToast('error','Permesso negato','Non puoi creare cartelle'); return; }
+    document.getElementById('newSubfolderName').value='';
+    document.getElementById('newSubfolderDesc').value='';
+    document.getElementById('subfolderParentName').textContent=currentFolderName;
+    document.getElementById('subfolderModal').style.display='flex';
+    setTimeout(()=>document.getElementById('newSubfolderName').focus(),80);
+}
+function closeSubfolderModal() { document.getElementById('subfolderModal').style.display='none'; }
+
+async function createSubfolder() {
+    const name=document.getElementById('newSubfolderName').value.trim();
+    const desc=document.getElementById('newSubfolderDesc').value.trim();
+    if (!name) { showToast('warning','Attenzione','Inserisci un nome'); return; }
+    try {
+        const payload={name,description:desc,parent_id:currentFolderId};
+        if (activeWorkspaceId) payload.workspace_id=activeWorkspaceId;
+        const res=await fetch('/api/folders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const data=await res.json();
+        if(data.success){ closeSubfolderModal(); showToast('success','Sottocartella creata',name); allSubFolders.push(data.folder); renderSubfolders(allSubFolders); }
+        else showToast('error','Errore',data.message);
+    } catch(e){ showToast('error','Errore di rete',e.message); }
+}
+
+// =====================================================================
+// FILTRI FILE v4.0
+// =====================================================================
+function setFilter(by) {
+    if (currentSortBy===by) { currentSortDir=currentSortDir==='asc'?'desc':'asc'; }
+    else { currentSortBy=by; currentSortDir='desc'; }
+    ['date','name','size','creator'].forEach(k => {
+        const btn=document.getElementById('filter'+k[0].toUpperCase()+k.slice(1));
+        const arrow=document.getElementById('filter'+k[0].toUpperCase()+k.slice(1)+'Arrow');
+        if(!btn) return;
+        const active=currentSortBy===k;
+        btn.classList.toggle('active',active);
+        if(arrow){ arrow.style.display=active?'':'none'; arrow.className=`bi bi-arrow-${currentSortDir==='asc'?'up':'down'}`; }
+    });
+    if (currentFolderId) loadFiles(currentFolderId);
 }
 
 async function loadFiles(folderId) {
-    document.getElementById('skeletonFiles').style.display = 'block';
-    document.getElementById('fileList').style.display = 'none';
-    document.getElementById('emptyFiles').style.display = 'none';
+    document.getElementById('skeletonFiles').style.display='block';
+    document.getElementById('fileList').style.display='none';
+    document.getElementById('emptyFiles').style.display='none';
+    document.getElementById('fileFilterBar').style.display='none';
     try {
-        const res = await fetch(`/api/folders/${folderId}/files?per_page=200`);
-        if (res.status === 401) { window.location.href = '/login'; return; }
-        const data = await res.json();
-        allFiles = data.files || [];
+        const res=await fetch(`/api/folders/${folderId}/files?per_page=200&sort_by=${currentSortBy}&sort_dir=${currentSortDir}`);
+        if(res.status===401){window.location.href='/login';return;}
+        const data=await res.json();
+        allFiles=data.files||[];
         renderFiles(allFiles);
-    } catch (e) {
-        showToast('error', 'Errore', 'Impossibile caricare i file');
-    }
+        if(allFiles.length) document.getElementById('fileFilterBar').style.display='flex';
+    } catch(e){ showToast('error','Errore','Impossibile caricare i file'); document.getElementById('skeletonFiles').style.display='none'; }
 }
 
 function getFileType(name) {
-    const ext = (name||'').split('.').pop().toLowerCase();
-    if (['txt','doc','docx','pdf','md','csv','xlsx','xls'].includes(ext)) return 'doc';
-    if (['jpg','jpeg','png','gif','svg','webp','bmp'].includes(ext)) return 'img';
-    if (['mp4','avi','mkv','mov','wmv'].includes(ext)) return 'video';
-    if (['mp3','wav','flac','aac','m4a'].includes(ext)) return 'audio';
-    if (['zip','rar','7z','tar','gz'].includes(ext)) return 'archive';
-    if (['py','js','ts','html','css','json','xml','java','cpp','c','sh'].includes(ext)) return 'code';
+    const ext=(name||'').split('.').pop().toLowerCase();
+    if(['txt','doc','docx','pdf','md','csv','xlsx','xls'].includes(ext)) return 'doc';
+    if(['jpg','jpeg','png','gif','svg','webp','bmp'].includes(ext)) return 'img';
+    if(['mp4','avi','mkv','mov','wmv'].includes(ext)) return 'video';
+    if(['mp3','wav','flac','aac','m4a'].includes(ext)) return 'audio';
+    if(['zip','rar','7z','tar','gz'].includes(ext)) return 'archive';
+    if(['py','js','ts','html','css','json','xml','java','cpp','c','sh'].includes(ext)) return 'code';
     return 'default';
 }
-function getFileIcon(t) {
-    return {doc:'bi-file-text',img:'bi-file-image',video:'bi-file-play',audio:'bi-file-music',archive:'bi-file-zip',code:'bi-file-code'}[t]||'bi-file-earmark';
-}
-function getFileColor(t) {
-    return {doc:'#3b82f6',img:'#10b981',video:'#8b5cf6',audio:'#f59e0b',archive:'#ef4444',code:'#06b6d4'}[t]||'#94a3b8';
-}
-
-function isExcelFile(name) {
-    const ext = (name||'').split('.').pop().toLowerCase();
-    return ['xlsx','xls','ods','xlsm','csv'].includes(ext);
-}
+function getFileIcon(t){return{doc:'bi-file-text',img:'bi-file-image',video:'bi-file-play',audio:'bi-file-music',archive:'bi-file-zip',code:'bi-file-code'}[t]||'bi-file-earmark';}
+function getFileColor(t){return{doc:'#3b82f6',img:'#10b981',video:'#8b5cf6',audio:'#f59e0b',archive:'#ef4444',code:'#06b6d4'}[t]||'#94a3b8';}
+function isExcelFile(name){return['xlsx','xls','ods','xlsm','csv'].includes((name||'').split('.').pop().toLowerCase());}
 
 function renderFiles(files) {
-    document.getElementById('skeletonFiles').style.display = 'none';
-    const list = document.getElementById('fileList');
-    const empty = document.getElementById('emptyFiles');
-    document.getElementById('fileCountLabel').textContent = `${files.length} file`;
-    if (!files.length) { list.style.display = 'none'; empty.style.display = 'block'; return; }
-    list.style.display = 'flex'; empty.style.display = 'none';
-    list.innerHTML = files.map(f => {
-        const t = getFileType(f.name);
-        const icon = getFileIcon(t);
-        const color = getFileColor(t);
-        const size = formatBytes(f.size);
-        const dt = new Date(f.created_at);
-        const dateStr = dt.toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'numeric'});
-        const timeStr = dt.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
-        const excelBtn = isExcelFile(f.name)
-            ? `<button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="excel" title="Apri Excel" style="color:var(--iris-success);"><i class="bi bi-table"></i></button>`
-            : '';
-        const delBtn = can('delete_files')
-            ? `<button class="btn-iris btn-iris-danger btn-iris-icon btn-iris-sm" data-action="delete" title="Elimina"><i class="bi bi-trash3"></i></button>`
-            : '';
+    document.getElementById('skeletonFiles').style.display='none';
+    const list=document.getElementById('fileList'); const empty=document.getElementById('emptyFiles');
+    document.getElementById('fileCountLabel').textContent=`${files.length} file`;
+    if(!files.length){list.style.display='none';empty.style.display='block';return;}
+    list.style.display='flex'; empty.style.display='none';
+    list.innerHTML=files.map(f=>{
+        const t=getFileType(f.name); const icon=getFileIcon(t); const color=getFileColor(t);
+        const size=formatBytes(f.size);
+        const dt=new Date(f.created_at);
+        const dateStr=dt.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+        const timeStr=dt.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+        const uploader=f.uploaded_by?`<i class="bi bi-person ms-1"></i>${escapeHtml(f.uploaded_by)}`:'';
+        const excelBtn=isExcelFile(f.name)?`<button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="excel" style="color:var(--iris-success);"><i class="bi bi-table"></i></button>`:'';
+        const delBtn=can('delete_files')?`<button class="btn-iris btn-iris-danger btn-iris-icon btn-iris-sm" data-action="delete"><i class="bi bi-trash3"></i></button>`:'';
         return `<div class="file-row" data-file-id="${f.id}">
             <div class="file-type-bar ftype-${t}"></div>
-            <div class="file-icon-wrap" style="background:${color}20;">
-                <i class="bi ${icon}" style="color:${color};"></i>
-            </div>
+            <div class="file-icon-wrap" style="background:${color}20;"><i class="bi ${icon}" style="color:${color};"></i></div>
             <div class="file-info">
                 <div class="file-name">${escapeHtml(f.name)}</div>
-                <div class="file-meta">${size} · ${dateStr} ${timeStr}</div>
+                <div class="file-meta">${size} · ${dateStr} ${timeStr}${uploader}</div>
             </div>
             <div class="file-actions">
                 ${excelBtn}
-                <button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="preview" title="Anteprima"><i class="bi bi-eye"></i></button>
-                <button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="download" title="Scarica"><i class="bi bi-download"></i></button>
+                <button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="preview"><i class="bi bi-eye"></i></button>
+                <button class="btn-iris btn-iris-ghost btn-iris-icon btn-iris-sm" data-action="download"><i class="bi bi-download"></i></button>
                 ${delBtn}
             </div>
         </div>`;
     }).join('');
-
-    list.querySelectorAll('.file-row').forEach(row => {
-        const fid = parseInt(row.dataset.fileId, 10);
-        const file = files.find(f => f.id === fid);
-        row.querySelector('[data-action="preview"]').addEventListener('click', () => openPreview(fid, file ? file.name : ''));
-        row.querySelector('[data-action="download"]').addEventListener('click', () => downloadFile(fid, file ? file.name : `file_${fid}`));
-        const delBtn = row.querySelector('[data-action="delete"]');
-        if (delBtn) delBtn.addEventListener('click', () => deleteFile(fid));
-        const excelBtn = row.querySelector('[data-action="excel"]');
-        if (excelBtn) excelBtn.addEventListener('click', () => openExcelModal(fid, file ? file.name : ''));
+    list.querySelectorAll('.file-row').forEach(row=>{
+        const fid=parseInt(row.dataset.fileId,10); const file=files.find(f=>f.id===fid);
+        row.querySelector('[data-action="preview"]').addEventListener('click',()=>openPreview(fid,file?file.name:''));
+        row.querySelector('[data-action="download"]').addEventListener('click',()=>downloadFile(fid,file?file.name:`file_${fid}`));
+        const db=row.querySelector('[data-action="delete"]'); if(db) db.addEventListener('click',()=>deleteFile(fid));
+        const eb=row.querySelector('[data-action="excel"]'); if(eb) eb.addEventListener('click',()=>openExcelModal(fid,file?file.name:''));
     });
 }
 
@@ -1297,41 +1471,40 @@ function renderFiles(files) {
 // SEARCH
 // =====================================================================
 function handleSearch(q) {
-    q = q.toLowerCase();
-    if (currentFolderId) { renderFiles(allFiles.filter(f => f.name.toLowerCase().includes(q))); }
-    else { renderFolders(allFolders.filter(f => f.name.toLowerCase().includes(q) || (f.description||'').toLowerCase().includes(q))); }
+    q=q.toLowerCase();
+    if(currentFolderId) renderFiles(allFiles.filter(f=>f.name.toLowerCase().includes(q)));
+    else renderFolders(allFolders.filter(f=>f.name.toLowerCase().includes(q)||(f.description||'').toLowerCase().includes(q)));
 }
 
 // =====================================================================
 // CREATE FOLDER
 // =====================================================================
 function openCreateModal() {
-    if (!can('create_folders')) { showToast('error', 'Permesso negato', 'Non hai il permesso per creare cartelle'); return; }
-    const m = document.getElementById('createModal');
-    m.style.display = 'flex';
-    ['newFolderName','newFolderDesc','newFolderPassword'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
-    document.getElementById('isEncrypted').checked = false;
-    document.getElementById('pwdField').style.display = 'none';
-    setTimeout(() => document.getElementById('newFolderName').focus(), 80);
+    if(!can('create_folders')){showToast('error','Permesso negato','Non hai il permesso per creare cartelle');return;}
+    ['newFolderName','newFolderDesc','newFolderPassword'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    document.getElementById('isEncrypted').checked=false;
+    document.getElementById('pwdField').style.display='none';
+    document.getElementById('createModal').style.display='flex';
+    setTimeout(()=>document.getElementById('newFolderName').focus(),80);
 }
-function closeModal() { document.getElementById('createModal').style.display = 'none'; }
+function closeModal(){document.getElementById('createModal').style.display='none';}
 
 async function createFolder() {
-    if (!can('create_folders')) { showToast('error', 'Permesso negato', 'Non puoi creare cartelle'); return; }
-    const name = document.getElementById('newFolderName').value.trim();
-    const description = document.getElementById('newFolderDesc').value.trim();
-    const isEncrypted = document.getElementById('isEncrypted').checked;
-    const password = document.getElementById('newFolderPassword').value;
-    if (!name) { showToast('warning', 'Attenzione', 'Inserisci un nome per la cartella'); return; }
-    if (isEncrypted && !password) { showToast('warning', 'Attenzione', 'Inserisci una password per la cartella cifrata'); return; }
-    const payload = {name, description, is_encrypted: isEncrypted, password};
-    if (activeWorkspaceId) payload.workspace_id = activeWorkspaceId;
+    if(!can('create_folders')){showToast('error','Permesso negato','Non puoi creare cartelle');return;}
+    const name=document.getElementById('newFolderName').value.trim();
+    const description=document.getElementById('newFolderDesc').value.trim();
+    const isEncrypted=document.getElementById('isEncrypted').checked;
+    const password=document.getElementById('newFolderPassword').value;
+    if(!name){showToast('warning','Attenzione','Inserisci un nome per la cartella');return;}
+    if(isEncrypted&&!password){showToast('warning','Attenzione','Inserisci una password per la cartella cifrata');return;}
+    const payload={name,description,is_encrypted:isEncrypted,password};
+    if(activeWorkspaceId) payload.workspace_id=activeWorkspaceId;
     try {
-        const res = await fetch('/api/folders', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-        const data = await res.json();
-        if (data.success) { closeModal(); showToast('success', 'Cartella creata', `"${name}" creata con successo`); loadDashboard(); }
-        else { showToast('error', 'Errore', data.message || 'Impossibile creare la cartella'); }
-    } catch (e) { showToast('error', 'Errore di rete', 'Controlla la connessione'); }
+        const res=await fetch('/api/folders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const data=await res.json();
+        if(data.success){closeModal();showToast('success','Cartella creata',`"${name}" creata`);loadDashboard();}
+        else showToast('error','Errore',data.message||'Impossibile creare');
+    } catch(e){showToast('error','Errore di rete','Controlla la connessione');}
 }
 
 // =====================================================================
@@ -1348,8 +1521,9 @@ const FOLDER_ICONS = [
 
 function openEditModal(folderId) {
     editFolderId = folderId;
-    const folder = allFolders.find(f => f.id === folderId);
+    const folder = allFolders.find(f => f.id===folderId);
     if (!folder) return;
+
     document.getElementById('editFolderName').value = folder.name;
     document.getElementById('editFolderDesc').value = folder.description || '';
     const currentIcon = folder.icon || 'bi-folder-fill';
@@ -1668,9 +1842,11 @@ document.addEventListener('keydown', e => {
         closePreview();
         closeDiskModal();
         closeSidebar();
+        closeSubfolderModal();
     }
     if (e.key === 'Enter' && document.getElementById('createModal').style.display !== 'none') createFolder();
     if (e.key === 'Enter' && document.getElementById('editModal').style.display !== 'none') saveEditFolder();
+    if (e.key === 'Enter' && document.getElementById('subfolderModal').style.display !== 'none') createSubfolder();
 });
 
 // =====================================================================
@@ -1772,10 +1948,9 @@ function wsConnect() {
         });
         _socket.on('folder_created', (folder) => {
             if (!currentFolderId) {
-                // Only refresh dashboard if on the right workspace
                 const wsId = folder.workspace_id || null;
                 const curWsId = typeof activeWorkspaceId !== 'undefined' ? activeWorkspaceId : null;
-                if (String(wsId) === String(curWsId)) {
+                if (String(wsId) === String(curWsId) && !folder.parent_id) {
                     allFolders.push(folder);
                     renderFolders(allFolders);
                     showToast('info', 'Nuova cartella', escapeHtml(folder.name));
@@ -1786,6 +1961,37 @@ function wsConnect() {
             if (!currentFolderId) {
                 allFolders = allFolders.filter(f => f.id !== data.folder_id);
                 renderFolders(allFolders);
+            }
+        });
+        // v4: sottocartella creata nella cartella corrente
+        _socket.on('subfolder_created', (data) => {
+            if (currentFolderId && data.parent_id === currentFolderId) {
+                if (!allSubFolders.find(f => f.id === data.folder.id)) {
+                    allSubFolders.push(data.folder);
+                    renderSubfolders(allSubFolders);
+                    showToast('info', 'Nuova sottocartella', escapeHtml(data.folder.name));
+                }
+            }
+        });
+        // v4: sottocartella eliminata nella cartella corrente
+        _socket.on('subfolder_deleted', (data) => {
+            if (currentFolderId && data.parent_id === currentFolderId) {
+                allSubFolders = allSubFolders.filter(f => f.id !== data.folder_id);
+                renderSubfolders(allSubFolders);
+            }
+        });
+        // v4: ordine cartelle cambiato da altra sessione dello stesso utente
+        _socket.on('folder_order_changed', (data) => {
+            if (!currentFolderId && data.workspace_id == activeWorkspaceId) {
+                // Ri-applica ordine senza re-fetch
+                if (Array.isArray(data.order)) {
+                    data.order.forEach(o => {
+                        const f = allFolders.find(x => x.id === o.folder_id);
+                        if (f) f._position = o.position;
+                    });
+                    allFolders.sort((a,b) => (a._position||9999)-(b._position||9999));
+                    renderFolders(allFolders);
+                }
             }
         });
         _socket.on('file_uploaded', (data) => {

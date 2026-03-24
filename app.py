@@ -332,24 +332,39 @@ class Folder(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     workspace_id = db.Column(db.Integer, db.ForeignKey('workspaces.id'), nullable=True)
+    parent_id = db.Column(db.Integer, db.ForeignKey('folders.id', ondelete='CASCADE'), nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
     files = db.relationship('File', backref='folder', lazy=True, cascade='all, delete-orphan')
     logs = db.relationship('ActionLog', backref='folder', lazy=True, cascade='all, delete-orphan')
+    children = db.relationship(
+        'Folder',
+        backref=db.backref('parent', remote_side='Folder.id'),
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+        foreign_keys='Folder.parent_id'
+    )
 
     def set_password(self, password):
-        """Hash password using werkzeug PBKDF2-SHA256"""
         self.password_hash = generate_password_hash(password)
-        # salt column no longer used — werkzeug stores salt inside the hash string
 
     def check_password(self, password):
-        """Verify password"""
         if not self.password_hash:
             return False
         return check_password_hash(self.password_hash, password)
 
+    def get_depth(self):
+        """Restituisce la profondità (root=0). Max 5 livelli."""
+        depth = 0
+        node = self
+        while node.parent_id and depth < 6:
+            node = db.session.get(Folder, node.parent_id)
+            if not node:
+                break
+            depth += 1
+        return depth
+
     def to_dict_base(self):
-        """Base dict without files_count (avoids N+1 — count passed separately)"""
         return {
             'id': self.id,
             'name': self.name,
@@ -357,19 +372,23 @@ class Folder(db.Model):
             'icon': self.icon or 'bi-folder-fill',
             'is_encrypted': self.is_encrypted,
             'workspace_id': self.workspace_id,
+            'parent_id': self.parent_id,
             'created_by_id': self.created_by_id,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
         }
 
     def to_dict(self):
-        """Full dict with files_count via subquery"""
         from sqlalchemy import func
         files_count = db.session.query(func.count(File.id)).filter(
             File.folder_id == self.id
         ).scalar()
+        children_count = db.session.query(func.count(Folder.id)).filter(
+            Folder.parent_id == self.id
+        ).scalar()
         d = self.to_dict_base()
         d['files_count'] = files_count
+        d['children_count'] = children_count
         return d
 
 
@@ -392,14 +411,35 @@ class File(db.Model):
     logs = db.relationship('ActionLog', backref='file', lazy=True, cascade='all, delete-orphan')
 
     def to_dict(self):
+        uploader = None
+        if self.uploaded_by_id:
+            u = db.session.get(User, self.uploaded_by_id)
+            uploader = u.full_name if u else None
         return {
             'id': self.id,
             'name': self.original_name or self.name,
             'size': self.size,
             'mime_type': self.mime_type,
             'created_at': self.created_at.isoformat(),
-            'is_encrypted': self.is_encrypted
+            'is_encrypted': self.is_encrypted,
+            'uploaded_by': uploader,
         }
+
+
+class FolderOrder(db.Model):
+    """Ordine drag&drop cartelle per utente (v4.0)."""
+    __tablename__ = 'folder_orders'
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'workspace_id', 'folder_id', name='uq_user_ws_folder'),
+        db.Index('ix_fo_user_ws', 'user_id', 'workspace_id'),
+        db.Index('ix_fo_folder', 'folder_id'),
+    )
+
+    id           = db.Column(db.Integer, primary_key=True)
+    user_id      = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspaces.id', ondelete='CASCADE'), nullable=True)
+    folder_id    = db.Column(db.Integer, db.ForeignKey('folders.id', ondelete='CASCADE'), nullable=False)
+    position     = db.Column(db.Integer, nullable=False, default=0)
 
 
 class ActionLog(db.Model):
@@ -1029,21 +1069,32 @@ def api_get_folders():
 
 @app.route('/api/folders', methods=['POST'])
 @api_login_required
-@limiter.limit("10 per minute")
+@limiter.limit("20 per minute")
 def api_create_folder():
-    """Create new folder"""
+    """Create folder — supporta parent_id per sottocartelle (v4.0)."""
     try:
         data = request.get_json()
         name = sanitize_name(data.get('name', ''))
         description = sanitize_name(data.get('description', ''), max_len=1000)
         is_encrypted = data.get('is_encrypted', False)
         password = data.get('password', '')
+        parent_id = data.get('parent_id')
+        workspace_id = data.get('workspace_id')
 
-        if not name or len(name) < 1:
+        if not name:
             return jsonify({'success': False, 'message': 'Nome cartella non valido'}), 400
 
         user = get_current_user()
-        workspace_id = data.get('workspace_id')
+
+        # Risolvi workspace_id e verifica profondità se è una sottocartella
+        if parent_id:
+            parent = db.session.get(Folder, parent_id)
+            if not parent:
+                return jsonify({'success': False, 'message': 'Cartella padre non trovata'}), 404
+            if parent.get_depth() >= 5:
+                return jsonify({'success': False, 'message': 'Profondità massima raggiunta (5 livelli)'}), 400
+            if not workspace_id:
+                workspace_id = parent.workspace_id
 
         if workspace_id:
             ws = Workspace.query.get(workspace_id)
@@ -1059,7 +1110,8 @@ def api_create_folder():
             name=name,
             description=description,
             is_encrypted=is_encrypted,
-            workspace_id=workspace_id if workspace_id else None,
+            workspace_id=workspace_id,
+            parent_id=parent_id,
             created_by_id=user.id
         )
 
@@ -1072,12 +1124,18 @@ def api_create_folder():
         cache.delete('all_folders')
         log_action('create_folder', 'folder', folder.id, f'Created: {name}')
 
-        # Newly created folder always has 0 files — no subquery needed
         d = folder.to_dict_base()
         d['files_count'] = 0
+        d['children_count'] = 0
         d['created_by_username'] = user.username
         d['created_by_display'] = user.full_name
-        socketio.emit('folder_created', d)
+
+        if parent_id:
+            socketio.emit('subfolder_created', {'folder': d, 'parent_id': parent_id},
+                          room=f'folder_{parent_id}')
+        else:
+            socketio.emit('folder_created', d)
+
         return jsonify({'success': True, 'folder': d}), 201
     except Exception as e:
         db.session.rollback()
@@ -1130,6 +1188,7 @@ def api_delete_folder(folder_id):
     try:
         folder = Folder.query.get_or_404(folder_id)
         folder_name = folder.name
+        parent_id = folder.parent_id  # salva prima di eliminare
 
         # Collect paths BEFORE deleting anything
         disk_paths = [
@@ -1151,7 +1210,15 @@ def api_delete_folder(folder_id):
 
         cache.delete('all_folders')
         log_action('delete_folder', 'folder', folder_id, f'Deleted: {folder_name}')
-        socketio.emit('folder_deleted', {'folder_id': folder_id})
+
+        if parent_id:
+            # Era una sottocartella — notifica la room del parent
+            socketio.emit('subfolder_deleted',
+                          {'folder_id': folder_id, 'parent_id': parent_id},
+                          room=f'folder_{parent_id}')
+        else:
+            socketio.emit('folder_deleted', {'folder_id': folder_id})
+
         return jsonify({'success': True, 'message': 'Cartella eliminata'})
     except Exception as e:
         db.session.rollback()
@@ -1162,20 +1229,34 @@ def api_delete_folder(folder_id):
 @app.route('/api/folders/<int:folder_id>/files', methods=['GET'])
 @api_login_required
 def api_get_files(folder_id):
-    """Get files in folder with pagination"""
+    """Get files con paginazione e filtri (sort_by, sort_dir). v4.0"""
     try:
         Folder.query.get_or_404(folder_id)
-        page = request.args.get('page', 1, type=int)
+        page     = request.args.get('page', 1, type=int)
         per_page = min(request.args.get('per_page', 50, type=int), 200)
-        pagination = File.query.filter_by(folder_id=folder_id).paginate(
-            page=page, per_page=per_page, error_out=False
-        )
+        sort_by  = request.args.get('sort_by', 'date')   # date|name|size|creator
+        sort_dir = request.args.get('sort_dir', 'desc')  # asc|desc
+
+        q = File.query.filter_by(folder_id=folder_id)
+
+        if sort_by == 'name':
+            order_col = File.original_name.asc() if sort_dir == 'asc' else File.original_name.desc()
+        elif sort_by == 'size':
+            order_col = File.size.asc() if sort_dir == 'asc' else File.size.desc()
+        elif sort_by == 'creator':
+            order_col = File.uploaded_by_id.asc() if sort_dir == 'asc' else File.uploaded_by_id.desc()
+        else:  # date
+            order_col = File.created_at.asc() if sort_dir == 'asc' else File.created_at.desc()
+
+        pagination = q.order_by(order_col).paginate(page=page, per_page=per_page, error_out=False)
         return jsonify({
             'files': [f.to_dict() for f in pagination.items],
             'total': pagination.total,
             'page': page,
             'pages': pagination.pages,
-            'per_page': per_page
+            'per_page': per_page,
+            'sort_by': sort_by,
+            'sort_dir': sort_dir,
         })
     except Exception as e:
         logger.error(f"Get files error: {e}")
@@ -2133,6 +2214,138 @@ def _get_folder_users(folder_id, exclude_sid=None):
     ]
 
 
+# ============================================================================
+# v4.0 — SOTTOCARTELLE, BREADCRUMB, ORDINE DRAG&DROP, FILTRI FILE
+# ============================================================================
+
+@app.route('/api/folders/<int:folder_id>/children', methods=['GET'])
+@api_login_required
+def api_get_children(folder_id):
+    """Sottocartelle dirette di una cartella con ordine utente applicato."""
+    try:
+        from sqlalchemy import func
+        user = get_current_user()
+        parent = Folder.query.get_or_404(folder_id)
+
+        # Verifica accesso
+        if parent.workspace_id:
+            ws = Workspace.query.get(parent.workspace_id)
+            member = OrganizationMember.query.filter_by(
+                user_id=user.id, organization_id=ws.organization_id
+            ).first() if ws else None
+            if not member:
+                return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+        elif parent.created_by_id and parent.created_by_id != user.id:
+            return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+
+        # Ordine utente
+        orders = {
+            fo.folder_id: fo.position
+            for fo in FolderOrder.query.filter_by(
+                user_id=user.id, workspace_id=parent.workspace_id
+            ).all()
+        }
+
+        children = Folder.query.filter_by(parent_id=folder_id).all()
+        children_data = []
+        for f in children:
+            files_count = db.session.query(func.count(File.id)).filter(File.folder_id == f.id).scalar() or 0
+            sub_count = db.session.query(func.count(Folder.id)).filter(Folder.parent_id == f.id).scalar() or 0
+            d = f.to_dict_base()
+            d['files_count'] = files_count
+            d['children_count'] = sub_count
+            d['position'] = orders.get(f.id, 9999)
+            children_data.append(d)
+
+        children_data.sort(key=lambda x: (x['position'], x['created_at']))
+        return jsonify({'success': True, 'children': children_data})
+    except Exception as e:
+        logger.error(f"Get children error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/folders/<int:folder_id>/breadcrumb', methods=['GET'])
+@api_login_required
+def api_get_breadcrumb(folder_id):
+    """Percorso root→cartella per breadcrumb dinamico (max 10 livelli)."""
+    try:
+        path = []
+        current = Folder.query.get_or_404(folder_id)
+        visited = set()
+        while current and current.id not in visited:
+            visited.add(current.id)
+            path.append({'id': current.id, 'name': current.name})
+            if not current.parent_id:
+                break
+            current = db.session.get(Folder, current.parent_id)
+        path.reverse()
+        return jsonify({'success': True, 'breadcrumb': path})
+    except Exception as e:
+        logger.error(f"Breadcrumb error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/folders/order', methods=['GET'])
+@api_login_required
+def api_get_folder_order():
+    """Ordine drag&drop dell'utente per workspace (o personale)."""
+    try:
+        user = get_current_user()
+        workspace_id = request.args.get('workspace_id', type=int)
+        orders = FolderOrder.query.filter_by(
+            user_id=user.id, workspace_id=workspace_id
+        ).order_by(FolderOrder.position).all()
+        return jsonify({
+            'success': True,
+            'order': [{'folder_id': o.folder_id, 'position': o.position} for o in orders]
+        })
+    except Exception as e:
+        logger.error(f"Get folder order error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/folders/order', methods=['POST'])
+@api_login_required
+@limiter.limit("60 per minute")
+def api_save_folder_order():
+    """Salva ordine drag&drop. Payload: {workspace_id, order:[{folder_id,position}]}"""
+    try:
+        user = get_current_user()
+        data = request.get_json()
+        workspace_id = data.get('workspace_id')  # None = personale
+        order_list = data.get('order', [])
+        if not isinstance(order_list, list):
+            return jsonify({'success': False, 'message': 'order deve essere una lista'}), 400
+
+        for item in order_list:
+            fid = item.get('folder_id')
+            pos = item.get('position', 0)
+            if not isinstance(fid, int) or not isinstance(pos, int):
+                continue
+            existing = FolderOrder.query.filter_by(
+                user_id=user.id, workspace_id=workspace_id, folder_id=fid
+            ).first()
+            if existing:
+                existing.position = pos
+            else:
+                db.session.add(FolderOrder(
+                    user_id=user.id, workspace_id=workspace_id,
+                    folder_id=fid, position=pos
+                ))
+
+        db.session.commit()
+        socketio.emit('folder_order_changed', {
+            'user_id': user.id,
+            'workspace_id': workspace_id,
+            'order': order_list
+        })
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Save folder order error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
 @socketio.on('connect')
 def handle_ws_connect(auth=None):
     user_id = session.get('user_id')
@@ -2210,7 +2423,264 @@ def api_users_online():
 
 
 # ============================================================================
-# EXCEL SAVE ENDPOINT
+# v4.0 — SOTTOCARTELLE, ORDINE DRAG&DROP, FILTRI FILE
+# ============================================================================
+
+@app.route('/api/folders/<int:folder_id>/children', methods=['GET'])
+@api_login_required
+def api_get_children(folder_id):
+    """Restituisce le sottocartelle dirette di una cartella."""
+    try:
+        from sqlalchemy import func
+        user = get_current_user()
+        parent = Folder.query.get_or_404(folder_id)
+
+        # Verifica accesso: workspace o personale
+        if parent.workspace_id:
+            ws = Workspace.query.get(parent.workspace_id)
+            member = OrganizationMember.query.filter_by(
+                user_id=user.id, organization_id=ws.organization_id
+            ).first() if ws else None
+            if not member:
+                return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+        elif parent.created_by_id and parent.created_by_id != user.id:
+            return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+
+        # Carica ordine utente
+        orders = {
+            fo.folder_id: fo.position
+            for fo in FolderOrder.query.filter_by(
+                user_id=user.id,
+                workspace_id=parent.workspace_id
+            ).all()
+        }
+
+        results = db.session.query(
+            Folder,
+            func.count(File.id).label('files_count'),
+            func.count(db.func.distinct(Folder.id)).label('children_count'),
+        ).outerjoin(File, File.folder_id == Folder.id
+        ).filter(Folder.parent_id == folder_id
+        ).group_by(Folder.id).all()
+
+        children_data = []
+        for f, fc, _ in results:
+            d = f.to_dict_base()
+            d['files_count'] = fc
+            d['children_count'] = db.session.query(func.count(Folder.id)).filter(
+                Folder.parent_id == f.id
+            ).scalar()
+            d['position'] = orders.get(f.id, 9999)
+            children_data.append(d)
+
+        children_data.sort(key=lambda x: (x['position'], x['created_at']))
+        return jsonify({'success': True, 'children': children_data})
+    except Exception as e:
+        logger.error(f"Get children error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/folders/<int:folder_id>/breadcrumb', methods=['GET'])
+@api_login_required
+def api_get_breadcrumb(folder_id):
+    """Restituisce il percorso root→cartella per il breadcrumb dinamico."""
+    try:
+        path = []
+        current = Folder.query.get_or_404(folder_id)
+        visited = set()
+        while current and current.id not in visited:
+            visited.add(current.id)
+            path.append({'id': current.id, 'name': current.name})
+            if not current.parent_id:
+                break
+            current = db.session.get(Folder, current.parent_id)
+        path.reverse()
+        return jsonify({'success': True, 'breadcrumb': path})
+    except Exception as e:
+        logger.error(f"Breadcrumb error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/folders/order', methods=['GET'])
+@api_login_required
+def api_get_folder_order():
+    """Carica l'ordine drag&drop dell'utente corrente per un workspace."""
+    try:
+        user = get_current_user()
+        workspace_id = request.args.get('workspace_id', type=int)
+        orders = FolderOrder.query.filter_by(
+            user_id=user.id, workspace_id=workspace_id
+        ).order_by(FolderOrder.position).all()
+        return jsonify({
+            'success': True,
+            'order': [{'folder_id': o.folder_id, 'position': o.position} for o in orders]
+        })
+    except Exception as e:
+        logger.error(f"Get folder order error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/folders/order', methods=['POST'])
+@api_login_required
+@limiter.limit("30 per minute")
+def api_save_folder_order():
+    """Salva l'ordine drag&drop per l'utente corrente.
+    Payload: { workspace_id: int|null, order: [{folder_id, position}] }"""
+    try:
+        user = get_current_user()
+        data = request.get_json()
+        workspace_id = data.get('workspace_id')  # None = personale
+        order_list = data.get('order', [])
+
+        if not isinstance(order_list, list):
+            return jsonify({'success': False, 'message': 'order deve essere una lista'}), 400
+
+        # Upsert posizioni con INSERT ... ON DUPLICATE KEY UPDATE
+        for item in order_list:
+            fid = item.get('folder_id')
+            pos = item.get('position', 0)
+            if not isinstance(fid, int) or not isinstance(pos, int):
+                continue
+            existing = FolderOrder.query.filter_by(
+                user_id=user.id, workspace_id=workspace_id, folder_id=fid
+            ).first()
+            if existing:
+                existing.position = pos
+            else:
+                db.session.add(FolderOrder(
+                    user_id=user.id,
+                    workspace_id=workspace_id,
+                    folder_id=fid,
+                    position=pos
+                ))
+
+        db.session.commit()
+
+        # Emetti evento WebSocket per sincronizzare altre sessioni dello stesso utente
+        socketio.emit('folder_order_changed', {
+            'user_id': user.id,
+            'workspace_id': workspace_id,
+            'order': order_list
+        })
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Save folder order error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/folders/<int:folder_id>/files', methods=['GET'])
+@api_login_required
+def api_get_files_v4(folder_id):
+    """Get files con paginazione e filtri (sort_by, sort_dir). v4.0"""
+    try:
+        Folder.query.get_or_404(folder_id)
+        page     = request.args.get('page', 1, type=int)
+        per_page = min(request.args.get('per_page', 50, type=int), 200)
+        sort_by  = request.args.get('sort_by', 'date')   # date|name|size|creator
+        sort_dir = request.args.get('sort_dir', 'desc')  # asc|desc
+
+        q = File.query.filter_by(folder_id=folder_id)
+
+        if sort_by == 'name':
+            col = File.original_name if sort_dir == 'asc' else File.original_name.desc()
+        elif sort_by == 'size':
+            col = File.size if sort_dir == 'asc' else File.size.desc()
+        elif sort_by == 'creator':
+            col = File.uploaded_by_id if sort_dir == 'asc' else File.uploaded_by_id.desc()
+        else:  # date (default)
+            col = File.created_at if sort_dir == 'asc' else File.created_at.desc()
+
+        pagination = q.order_by(col).paginate(page=page, per_page=per_page, error_out=False)
+        return jsonify({
+            'files': [f.to_dict() for f in pagination.items],
+            'total': pagination.total,
+            'page': page,
+            'pages': pagination.pages,
+            'per_page': per_page,
+            'sort_by': sort_by,
+            'sort_dir': sort_dir,
+        })
+    except Exception as e:
+        logger.error(f"Get files v4 error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/folders', methods=['POST'])
+@api_login_required
+@limiter.limit("20 per minute")
+def api_create_folder_v4():
+    """Create folder (v4: supporta parent_id per sottocartelle)."""
+    try:
+        data = request.get_json()
+        name = sanitize_name(data.get('name', ''))
+        description = sanitize_name(data.get('description', ''), max_len=1000)
+        is_encrypted = data.get('is_encrypted', False)
+        password = data.get('password', '')
+        parent_id = data.get('parent_id')
+        workspace_id = data.get('workspace_id')
+
+        if not name:
+            return jsonify({'success': False, 'message': 'Nome cartella non valido'}), 400
+
+        user = get_current_user()
+
+        # Risolvi workspace_id dal parent se non fornito
+        if parent_id:
+            parent = db.session.get(Folder, parent_id)
+            if not parent:
+                return jsonify({'success': False, 'message': 'Cartella padre non trovata'}), 404
+            if parent.get_depth() >= 5:
+                return jsonify({'success': False, 'message': 'Profondità massima raggiunta (5 livelli)'}), 400
+            if not workspace_id:
+                workspace_id = parent.workspace_id
+
+        if workspace_id:
+            ws = Workspace.query.get(workspace_id)
+            if not ws:
+                return jsonify({'success': False, 'message': 'Workspace non trovato'}), 404
+            member = OrganizationMember.query.filter_by(
+                user_id=user.id, organization_id=ws.organization_id
+            ).first()
+            if not member:
+                return jsonify({'success': False, 'message': 'Accesso negato al workspace'}), 403
+
+        folder = Folder(
+            name=name,
+            description=description,
+            is_encrypted=is_encrypted,
+            workspace_id=workspace_id,
+            parent_id=parent_id,
+            created_by_id=user.id
+        )
+
+        if is_encrypted and password:
+            folder.set_password(password)
+
+        db.session.add(folder)
+        db.session.commit()
+
+        cache.delete('all_folders')
+        log_action('create_folder', 'folder', folder.id, f'Created: {name}')
+
+        d = folder.to_dict_base()
+        d['files_count'] = 0
+        d['children_count'] = 0
+        d['created_by_username'] = user.username
+        d['created_by_display'] = user.full_name
+
+        if parent_id:
+            # Evento specifico sottocartella → room del parent
+            socketio.emit('subfolder_created', {'folder': d, 'parent_id': parent_id},
+                          room=f'folder_{parent_id}')
+        else:
+            socketio.emit('folder_created', d)
+
+        return jsonify({'success': True, 'folder': d}), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Create folder v4 error: {e}")
+        return jsonify({'success': False, 'message': 'Errore creazione'}), 500
 # ============================================================================
 
 @app.route('/api/files/<int:file_id>/excel-save', methods=['POST'])

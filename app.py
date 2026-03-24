@@ -26,6 +26,9 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 import base64
+import random
+import string
+import secrets
 from dotenv import load_dotenv
 
 # Load .env / env file before reading any os.environ variables
@@ -46,9 +49,10 @@ if not _secret or len(_secret) < 32:
     )
 app.config['SECRET_KEY'] = _secret
 
-# Admin credentials (read from env at startup)
+# Admin credentials — used only to seed the first user on first startup
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
-ADMIN_PASSWORD_HASH = generate_password_hash(os.environ.get('ADMIN_PASSWORD', 'changeme_insecure_default'))
+ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@iris-ve.local')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'changeme_insecure_default')
 
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL',
@@ -118,6 +122,115 @@ logger = logging.getLogger(__name__)
 # DATABASE MODELS
 # ============================================================================
 
+class User(db.Model):
+    __tablename__ = 'users'
+    __table_args__ = (
+        db.Index('ix_users_username', 'username'),
+        db.Index('ix_users_email', 'email'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    memberships = db.relationship('OrganizationMember', backref='user', lazy='dynamic',
+                                  cascade='all, delete-orphan',
+                                  foreign_keys='OrganizationMember.user_id')
+    owned_organizations = db.relationship('Organization', backref='owner', lazy=True,
+                                          foreign_keys='Organization.owner_id')
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'created_at': self.created_at.isoformat()
+        }
+
+
+class Organization(db.Model):
+    __tablename__ = 'organizations'
+    __table_args__ = (
+        db.Index('ix_organizations_invite_code', 'invite_code'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    address = db.Column(db.Text, nullable=True)
+    phone = db.Column(db.String(20), nullable=True)
+    invite_code = db.Column(db.String(6), unique=True, nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    members = db.relationship('OrganizationMember', backref='organization', lazy=True,
+                              cascade='all, delete-orphan',
+                              foreign_keys='OrganizationMember.organization_id')
+    workspace = db.relationship('Workspace', backref='organization', lazy=True,
+                                uselist=False, cascade='all, delete-orphan')
+
+    def to_dict(self, include_code=False):
+        d = {
+            'id': self.id,
+            'name': self.name,
+            'address': self.address,
+            'phone': self.phone,
+            'owner_id': self.owner_id,
+            'created_at': self.created_at.isoformat()
+        }
+        if include_code:
+            d['invite_code'] = self.invite_code
+        return d
+
+
+class OrganizationMember(db.Model):
+    __tablename__ = 'organization_members'
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'organization_id', name='uq_user_org'),
+        db.Index('ix_org_members_user', 'user_id'),
+        db.Index('ix_org_members_org', 'organization_id'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default='member')  # 'owner' or 'member'
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'user_id': self.user_id,
+            'organization_id': self.organization_id,
+            'role': self.role,
+            'joined_at': self.joined_at.isoformat()
+        }
+
+
+class Workspace(db.Model):
+    __tablename__ = 'workspaces'
+
+    id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'organization_id': self.organization_id,
+            'name': self.name,
+            'created_at': self.created_at.isoformat()
+        }
+
+
 class Folder(db.Model):
     __tablename__ = 'folders'
 
@@ -130,6 +243,9 @@ class Folder(db.Model):
     salt = db.Column(db.String(255), nullable=True)  # kept for schema compatibility
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    workspace_id = db.Column(db.Integer, db.ForeignKey('workspaces.id'), nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
     files = db.relationship('File', backref='folder', lazy=True, cascade='all, delete-orphan')
     logs = db.relationship('ActionLog', backref='folder', lazy=True, cascade='all, delete-orphan')
 
@@ -152,6 +268,8 @@ class Folder(db.Model):
             'description': self.description,
             'icon': self.icon or 'bi-folder-fill',
             'is_encrypted': self.is_encrypted,
+            'workspace_id': self.workspace_id,
+            'created_by_id': self.created_by_id,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
         }
@@ -182,6 +300,7 @@ class File(db.Model):
     file_path = db.Column(db.String(512), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_encrypted = db.Column(db.Boolean, default=False)
+    uploaded_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     logs = db.relationship('ActionLog', backref='file', lazy=True, cascade='all, delete-orphan')
 
     def to_dict(self):
@@ -282,6 +401,19 @@ app.jinja_env.globals.update(
     get_file_icon_class=get_file_icon_class,
     format_bytes=format_bytes,
 )
+
+
+def generate_invite_code():
+    """Generate a unique 6-char alphanumeric invite code (uppercase + digits)"""
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+
+def get_current_user():
+    """Return the logged-in User ORM object, or None if not authenticated"""
+    user_id = session.get('user_id')
+    if not user_id:
+        return None
+    return User.query.get(user_id)
 
 
 def get_local_ip():
@@ -442,12 +574,127 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
-        if username == ADMIN_USERNAME and check_password_hash(ADMIN_PASSWORD_HASH, password):
-            session['user_id'] = 1
+        user = User.query.filter_by(username=username).first()
+        if user and user.check_password(password):
+            session['user_id'] = user.id
             session.permanent = True
+            log_action('login', details=f'User {username} logged in')
             return redirect(url_for('dashboard'))
         return render_template('index.html', login_error='Credenziali non valide')
     return render_template('index.html')
+
+
+@app.route('/register', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
+def register():
+    """User registration with optional organization creation/join"""
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        has_org = request.form.get('has_org') == 'yes'
+        org_exists = request.form.get('org_exists') == 'yes'
+        invite_code = request.form.get('invite_code', '').strip().upper()
+        org_name = request.form.get('org_name', '').strip()
+        org_address = request.form.get('org_address', '').strip()
+        org_phone = request.form.get('org_phone', '').strip()
+
+        errors = []
+        if not username or len(username) < 3:
+            errors.append('Username deve essere di almeno 3 caratteri')
+        elif not username.replace('_', '').replace('-', '').isalnum():
+            errors.append('Username può contenere solo lettere, numeri, _ e -')
+        if not email or '@' not in email or '.' not in email.split('@')[-1]:
+            errors.append('Email non valida')
+        if not password or len(password) < 8:
+            errors.append('La password deve essere di almeno 8 caratteri')
+        if password != confirm_password:
+            errors.append('Le password non coincidono')
+
+        if not errors:
+            if User.query.filter_by(username=username).first():
+                errors.append('Username già in uso')
+            if User.query.filter_by(email=email).first():
+                errors.append('Email già registrata')
+
+        org_to_join = None
+        if not errors and has_org:
+            if org_exists:
+                if not invite_code or len(invite_code) != 6:
+                    errors.append('Il codice organizzazione deve essere di 6 caratteri')
+                else:
+                    org_to_join = Organization.query.filter_by(invite_code=invite_code).first()
+                    if not org_to_join:
+                        errors.append('Codice organizzazione non trovato o non valido')
+            else:
+                if not org_name or len(org_name) < 2:
+                    errors.append('Il nome dell\'azienda deve essere di almeno 2 caratteri')
+
+        if errors:
+            return render_template('register.html', errors=errors, form_data=request.form)
+
+        try:
+            user = User(username=username, email=email)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.flush()
+
+            if has_org:
+                if org_exists and org_to_join:
+                    member = OrganizationMember(
+                        user_id=user.id,
+                        organization_id=org_to_join.id,
+                        role='member'
+                    )
+                    db.session.add(member)
+                else:
+                    # Generate unique invite code
+                    for _ in range(10):
+                        code = generate_invite_code()
+                        if not Organization.query.filter_by(invite_code=code).first():
+                            break
+
+                    org = Organization(
+                        name=sanitize_name(org_name),
+                        address=sanitize_name(org_address, max_len=500) if org_address else None,
+                        phone=org_phone[:20] if org_phone else None,
+                        invite_code=code,
+                        owner_id=user.id
+                    )
+                    db.session.add(org)
+                    db.session.flush()
+
+                    member = OrganizationMember(
+                        user_id=user.id,
+                        organization_id=org.id,
+                        role='owner'
+                    )
+                    db.session.add(member)
+
+                    workspace = Workspace(
+                        organization_id=org.id,
+                        name=f"Workspace {org.name}"
+                    )
+                    db.session.add(workspace)
+
+            db.session.commit()
+            session['user_id'] = user.id
+            session.permanent = True
+            log_action('register', details=f'New user registered: {username}')
+            return redirect(url_for('dashboard'))
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Registration error: {e}")
+            return render_template('register.html',
+                                   errors=['Errore durante la registrazione. Riprova.'],
+                                   form_data=request.form)
+
+    return render_template('register.html')
 
 
 @app.route('/logout')
@@ -460,10 +707,29 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    """Dashboard with folders"""
+    """Dashboard with personal folders and workspace list"""
     try:
-        folders = Folder.query.all()
-        return render_template('folder.html', folders=folders)
+        user = get_current_user()
+        # Personal folders: no workspace, owned by this user (or legacy no-owner)
+        folders = Folder.query.filter(
+            Folder.workspace_id.is_(None),
+            db.or_(Folder.created_by_id == user.id, Folder.created_by_id.is_(None))
+        ).all()
+
+        # Memberships with org + workspace info
+        memberships = OrganizationMember.query.filter_by(user_id=user.id).all()
+        user_workspaces = []
+        for m in memberships:
+            org = m.organization
+            if org.workspace:
+                user_workspaces.append({
+                    'workspace': org.workspace,
+                    'org': org,
+                    'role': m.role
+                })
+
+        return render_template('folder.html', folders=folders, user=user,
+                               user_workspaces=user_workspaces, active_workspace=None)
     except Exception as e:
         logger.error(f"Dashboard error: {e}")
         return render_template('500.html'), 500
@@ -474,7 +740,27 @@ def dashboard():
 def view_folder(folder_id):
     """View folder contents"""
     try:
+        user = get_current_user()
         folder = Folder.query.get_or_404(folder_id)
+
+        # Access control
+        if folder.workspace_id:
+            ws = Workspace.query.get(folder.workspace_id)
+            member = OrganizationMember.query.filter_by(
+                user_id=user.id, organization_id=ws.organization_id
+            ).first() if ws else None
+            if not member:
+                return render_template('404.html'), 404
+        elif folder.created_by_id and folder.created_by_id != user.id:
+            return render_template('404.html'), 404
+
+        # Memberships for sidebar
+        memberships = OrganizationMember.query.filter_by(user_id=user.id).all()
+        user_workspaces = []
+        for m in memberships:
+            org = m.organization
+            if org.workspace:
+                user_workspaces.append({'workspace': org.workspace, 'org': org, 'role': m.role})
 
         if folder.is_encrypted:
             locked = not session.get(f'folder_{folder_id}_unlocked', False)
@@ -484,7 +770,9 @@ def view_folder(folder_id):
                                    content='', locked=locked)
 
         files = File.query.filter_by(folder_id=folder_id).all()
-        return render_template('folder.html', folder=folder, files=files)
+        return render_template('folder.html', folder=folder, files=files,
+                               user=user, user_workspaces=user_workspaces,
+                               active_workspace=folder.workspace_id)
     except Exception as e:
         logger.error(f"View folder error: {e}")
         return render_template('500.html'), 500
@@ -512,15 +800,33 @@ def documentation():
 
 @app.route('/api/folders', methods=['GET'])
 @api_login_required
-@cache.cached(timeout=30, key_prefix='all_folders')
 def api_get_folders():
-    """Get all folders with file count via single JOIN query (no N+1)"""
+    """Get folders filtered by workspace or personal (no N+1 via JOIN)"""
     try:
         from sqlalchemy import func
+        user = get_current_user()
+        workspace_id = request.args.get('workspace_id', type=int)
+
+        if workspace_id:
+            ws = Workspace.query.get_or_404(workspace_id)
+            member = OrganizationMember.query.filter_by(
+                user_id=user.id, organization_id=ws.organization_id
+            ).first()
+            if not member:
+                return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+            folder_filter = Folder.workspace_id == workspace_id
+        else:
+            folder_filter = db.and_(
+                Folder.workspace_id.is_(None),
+                db.or_(Folder.created_by_id == user.id, Folder.created_by_id.is_(None))
+            )
+
         results = db.session.query(
             Folder,
             func.count(File.id).label('files_count')
-        ).outerjoin(File, File.folder_id == Folder.id).group_by(Folder.id).all()
+        ).outerjoin(File, File.folder_id == Folder.id).filter(
+            folder_filter
+        ).group_by(Folder.id).all()
 
         folders_data = []
         for folder, count in results:
@@ -548,7 +854,26 @@ def api_create_folder():
         if not name or len(name) < 1:
             return jsonify({'success': False, 'message': 'Nome cartella non valido'}), 400
 
-        folder = Folder(name=name, description=description, is_encrypted=is_encrypted)
+        user = get_current_user()
+        workspace_id = data.get('workspace_id')
+
+        if workspace_id:
+            ws = Workspace.query.get(workspace_id)
+            if not ws:
+                return jsonify({'success': False, 'message': 'Workspace non trovato'}), 404
+            member = OrganizationMember.query.filter_by(
+                user_id=user.id, organization_id=ws.organization_id
+            ).first()
+            if not member:
+                return jsonify({'success': False, 'message': 'Accesso negato al workspace'}), 403
+
+        folder = Folder(
+            name=name,
+            description=description,
+            is_encrypted=is_encrypted,
+            workspace_id=workspace_id if workspace_id else None,
+            created_by_id=user.id
+        )
 
         if is_encrypted and password:
             folder.set_password(password)
@@ -933,6 +1258,104 @@ def api_get_documentation():
 
 
 # ============================================================================
+# ORGANIZATION & WORKSPACE ENDPOINTS
+# ============================================================================
+
+@app.route('/api/user', methods=['GET'])
+@api_login_required
+def api_get_current_user_info():
+    """Get current user info"""
+    try:
+        user = get_current_user()
+        return jsonify(user.to_dict())
+    except Exception as e:
+        logger.error(f"Get user error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/organizations', methods=['GET'])
+@api_login_required
+def api_get_user_organizations():
+    """Get all organizations the current user belongs to (with invite code for owners)"""
+    try:
+        user = get_current_user()
+        memberships = OrganizationMember.query.filter_by(user_id=user.id).all()
+
+        result = []
+        for m in memberships:
+            org = m.organization
+            d = org.to_dict(include_code=(m.role == 'owner'))
+            d['role'] = m.role
+            d['joined_at'] = m.joined_at.isoformat()
+            d['member_count'] = OrganizationMember.query.filter_by(
+                organization_id=org.id
+            ).count()
+            if org.workspace:
+                d['workspace'] = org.workspace.to_dict()
+            result.append(d)
+
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Get organizations error: {e}")
+        return jsonify({'success': False, 'message': 'Errore'}), 500
+
+
+@app.route('/api/organizations/lookup', methods=['GET'])
+@limiter.limit("20 per minute")
+def api_organization_lookup():
+    """Public endpoint: look up org by invite code during registration (no auth required)"""
+    code = request.args.get('code', '').strip().upper()
+    if not code or len(code) != 6:
+        return jsonify({'found': False, 'message': 'Il codice deve essere di 6 caratteri'}), 400
+    org = Organization.query.filter_by(invite_code=code).first()
+    if not org:
+        return jsonify({'found': False, 'message': 'Nessuna organizzazione trovata con questo codice'}), 404
+    member_count = OrganizationMember.query.filter_by(organization_id=org.id).count()
+    return jsonify({
+        'found': True,
+        'name': org.name,
+        'address': org.address,
+        'phone': org.phone,
+        'member_count': member_count,
+        'created_at': org.created_at.strftime('%d/%m/%Y')
+    })
+
+
+@app.route('/workspace/<int:workspace_id>')
+@login_required
+def workspace_view(workspace_id):
+    """View workspace folders"""
+    try:
+        user = get_current_user()
+        ws = Workspace.query.get_or_404(workspace_id)
+        org = ws.organization
+
+        member = OrganizationMember.query.filter_by(
+            user_id=user.id, organization_id=org.id
+        ).first()
+        if not member:
+            return render_template('404.html'), 404
+
+        folders = Folder.query.filter_by(workspace_id=workspace_id).all()
+
+        memberships = OrganizationMember.query.filter_by(user_id=user.id).all()
+        user_workspaces = []
+        for m in memberships:
+            o = m.organization
+            if o.workspace:
+                user_workspaces.append({'workspace': o.workspace, 'org': o, 'role': m.role})
+
+        return render_template('folder.html', folders=folders, user=user,
+                               user_workspaces=user_workspaces,
+                               active_workspace=workspace_id,
+                               active_org=org,
+                               active_member_role=member.role)
+    except Exception as e:
+        logger.error(f"Workspace view error: {e}")
+        return render_template('500.html'), 500
+
+
+# ============================================================================
 # UTILITY & MONITORING ENDPOINTS
 # ============================================================================
 
@@ -955,12 +1378,50 @@ def health_check():
 @app.route('/api/stats')
 @api_login_required
 def api_stats():
-    """System statistics: folder/file counts, total size"""
+    """Statistics filtered by workspace_id (org workspace) or personal (current user)"""
     try:
         from sqlalchemy import func
-        folder_count = db.session.query(func.count(Folder.id)).scalar() or 0
-        file_count = db.session.query(func.count(File.id)).scalar() or 0
-        total_size = db.session.query(func.sum(File.size)).scalar() or 0
+        user = get_current_user()
+        workspace_id = request.args.get('workspace_id', type=int)
+
+        if workspace_id:
+            # Workspace aziendale — verifica accesso
+            ws = Workspace.query.get(workspace_id)
+            if not ws:
+                return jsonify({'success': False, 'message': 'Workspace non trovato'}), 404
+            member = OrganizationMember.query.filter_by(
+                user_id=user.id, organization_id=ws.organization_id
+            ).first()
+            if not member:
+                return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+
+            folder_q = db.session.query(func.count(Folder.id)).filter(
+                Folder.workspace_id == workspace_id
+            )
+            file_q = db.session.query(func.count(File.id)).join(
+                Folder, File.folder_id == Folder.id
+            ).filter(Folder.workspace_id == workspace_id)
+            size_q = db.session.query(func.sum(File.size)).join(
+                Folder, File.folder_id == Folder.id
+            ).filter(Folder.workspace_id == workspace_id)
+        else:
+            # Cartelle personali dell'utente (o legacy senza owner)
+            folder_filter = db.and_(
+                Folder.workspace_id.is_(None),
+                db.or_(Folder.created_by_id == user.id, Folder.created_by_id.is_(None))
+            )
+            folder_q = db.session.query(func.count(Folder.id)).filter(folder_filter)
+            file_q = db.session.query(func.count(File.id)).join(
+                Folder, File.folder_id == Folder.id
+            ).filter(folder_filter)
+            size_q = db.session.query(func.sum(File.size)).join(
+                Folder, File.folder_id == Folder.id
+            ).filter(folder_filter)
+
+        folder_count = folder_q.scalar() or 0
+        file_count = file_q.scalar() or 0
+        total_size = size_q.scalar() or 0
+
         return jsonify({
             'folders': folder_count,
             'files': file_count,
@@ -1094,6 +1555,16 @@ if __name__ == '__main__':
         try:
             db.create_all()
             logger.info("✅ Database tables created")
+
+            # Seed admin user if no users exist (first run)
+            if User.query.count() == 0:
+                admin = User(username=ADMIN_USERNAME, email=ADMIN_EMAIL)
+                admin.set_password(ADMIN_PASSWORD)
+                db.session.add(admin)
+                db.session.commit()
+                logger.info(f"✅ Admin user '{ADMIN_USERNAME}' created from environment variables")
+                print(f"✅ Utente admin '{ADMIN_USERNAME}' creato dall'ambiente")
+
         except Exception as e:
             logger.error(f"❌ Database initialization error: {e}")
             print(f"⚠️  Database error: {e}")

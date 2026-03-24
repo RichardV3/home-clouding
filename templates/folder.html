@@ -298,6 +298,124 @@
             .folders-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
         }
 
+        /* ===== USER INFO ===== */
+        .sidebar-user {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px 14px;
+            border-bottom: 1px solid var(--iris-border);
+        }
+        .user-avatar {
+            width: 34px; height: 34px;
+            border-radius: 50%;
+            background: var(--iris-accent-grad);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+        .user-info { flex: 1; min-width: 0; }
+        .user-name {
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: var(--iris-text-primary);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .user-role {
+            font-size: 0.6875rem;
+            color: var(--iris-text-muted);
+        }
+
+        /* ===== WORKSPACE SWITCHER ===== */
+        .workspace-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: var(--iris-radius-md);
+            color: var(--iris-text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: var(--iris-transition);
+            cursor: pointer;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+        .workspace-link:hover {
+            background: rgba(99,102,241,0.08);
+            color: var(--iris-text-primary);
+        }
+        .workspace-link.active {
+            background: rgba(99,102,241,0.14);
+            color: var(--iris-accent-3);
+        }
+        .workspace-link-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--iris-accent);
+            flex-shrink: 0;
+        }
+        .workspace-link-dot.personal { background: var(--iris-success); }
+
+        /* Invite code badge in sidebar */
+        .org-code-section {
+            padding: 12px 14px;
+            border-top: 1px solid var(--iris-border);
+        }
+        .org-code-card {
+            background: rgba(16,185,129,0.07);
+            border: 1px solid rgba(16,185,129,0.2);
+            border-radius: var(--iris-radius-md);
+            padding: 10px 12px;
+            margin-bottom: 8px;
+        }
+        .org-code-card:last-child { margin-bottom: 0; }
+        .org-code-label {
+            font-size: 0.6875rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--iris-success);
+            margin-bottom: 4px;
+        }
+        .org-code-name {
+            font-size: 0.8rem;
+            color: var(--iris-text-secondary);
+            margin-bottom: 6px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .org-code-value {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .org-code-mono {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.9375rem;
+            font-weight: 900;
+            letter-spacing: 0.14em;
+            color: var(--iris-success);
+            flex: 1;
+        }
+        .org-code-copy-btn {
+            width: 24px; height: 24px;
+            background: rgba(16,185,129,0.12);
+            border: none;
+            border-radius: 6px;
+            color: var(--iris-success);
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem;
+            transition: var(--iris-transition);
+            flex-shrink: 0;
+        }
+        .org-code-copy-btn:hover { background: rgba(16,185,129,0.25); }
+
         /* ===== PREVIEW MODAL ===== */
         .preview-overlay {
             position: fixed; inset: 0; background: rgba(0,0,0,0.75);
@@ -352,9 +470,46 @@
             </a>
         </div>
 
+        {% if user %}
+        <div class="sidebar-user">
+            <div class="user-avatar">{{ user.username[0]|upper }}</div>
+            <div class="user-info">
+                <div class="user-name">{{ user.username }}</div>
+                <div class="user-role">
+                    {% if user_workspaces %}{{ user_workspaces|length }} organizzazion{% if user_workspaces|length == 1 %}e{% else %}i{% endif %}{% else %}Account personale{% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <nav class="sidebar-nav">
-            <div class="sidebar-section-label">Navigazione</div>
-            <a class="sidebar-link active" href="/dashboard">
+            <div class="sidebar-section-label">Spazio di lavoro</div>
+
+            <!-- Personal workspace -->
+            <button class="workspace-link {% if not active_workspace %}active{% endif %}"
+                    onclick="switchWorkspace(null)"
+                    id="wsPersonal">
+                <span class="workspace-link-dot personal"></span>
+                <span>Personale</span>
+            </button>
+
+            {% if user_workspaces %}
+            {% for ws_info in user_workspaces %}
+            <button class="workspace-link {% if active_workspace == ws_info.workspace.id %}active{% endif %}"
+                    onclick="switchWorkspace({{ ws_info.workspace.id }}, '{{ ws_info.org.name|e }}')"
+                    id="ws{{ ws_info.workspace.id }}"
+                    title="{{ ws_info.org.name }}">
+                <span class="workspace-link-dot"></span>
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ ws_info.org.name }}</span>
+                {% if ws_info.role == 'owner' %}
+                <span style="margin-left:auto;font-size:0.65rem;background:rgba(99,102,241,0.15);color:var(--iris-accent);padding:1px 5px;border-radius:4px;flex-shrink:0;">Owner</span>
+                {% endif %}
+            </button>
+            {% endfor %}
+            {% endif %}
+
+            <div class="sidebar-section-label" style="margin-top:14px;">Navigazione</div>
+            <a class="sidebar-link" href="/dashboard">
                 <i class="bi bi-grid-3x3-gap-fill"></i> Dashboard
             </a>
             <a class="sidebar-link" href="/documentation">
@@ -401,6 +556,27 @@
             <div class="network-row"><i class="bi bi-server"></i><span>FTP:</span><span class="network-val" id="netFtp">…</span></div>
         </div>
 
+        {% if user_workspaces %}
+        {% set owned = user_workspaces|selectattr('role','equalto','owner')|list %}
+        {% if owned %}
+        <div class="org-code-section">
+            <div class="sidebar-section-label" style="padding:0;margin-bottom:8px;">Codici Invito</div>
+            {% for ws_info in owned %}
+            <div class="org-code-card">
+                <div class="org-code-label"><i class="bi bi-key-fill me-1"></i>Owner</div>
+                <div class="org-code-name">{{ ws_info.org.name }}</div>
+                <div class="org-code-value">
+                    <span class="org-code-mono" id="code_{{ ws_info.org.id }}">{{ ws_info.org.invite_code }}</span>
+                    <button class="org-code-copy-btn" onclick="copyOrgCode('{{ ws_info.org.invite_code }}', this)" title="Copia codice">
+                        <i class="bi bi-copy"></i>
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endif %}
+
         <div class="sidebar-footer">
             <a class="sidebar-link danger" href="/logout">
                 <i class="bi bi-box-arrow-left"></i> Esci
@@ -430,7 +606,7 @@
             <div id="dashboardView">
                 <div class="page-header">
                     <div>
-                        <div class="page-title">Le tue cartelle</div>
+                        <div class="page-title" id="pageTitle">{% if active_org %}{{ active_org.name }}{% else %}Le tue cartelle{% endif %}</div>
                         <div class="page-subtitle" id="folderCountLabel">Caricamento…</div>
                     </div>
                     <button class="btn-iris btn-iris-primary" onclick="openCreateModal()">
@@ -632,6 +808,8 @@ let currentFolderId = null;
 let currentFolderName = '';
 let allFolders = [];
 let allFiles = [];
+let activeWorkspaceId = {% if active_workspace %}{{ active_workspace }}{% else %}null{% endif %};
+let activeWorkspaceName = {% if active_org %}'{{ active_org.name|e }}'{% else %}null{% endif %};
 
 // =====================================================================
 // INIT
@@ -648,6 +826,41 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // =====================================================================
+// WORKSPACE SWITCHER
+// =====================================================================
+function switchWorkspace(wsId, wsName) {
+    activeWorkspaceId = wsId;
+    activeWorkspaceName = wsName || null;
+
+    // Update active state on buttons
+    document.querySelectorAll('.workspace-link').forEach(btn => btn.classList.remove('active'));
+    const activeBtn = wsId ? document.getElementById('ws' + wsId) : document.getElementById('wsPersonal');
+    if (activeBtn) activeBtn.classList.add('active');
+
+    // Navigate to appropriate URL
+    if (wsId) {
+        window.location.href = '/workspace/' + wsId;
+    } else {
+        window.location.href = '/dashboard';
+    }
+}
+
+function copyOrgCode(code, btn) {
+    navigator.clipboard.writeText(code).then(() => {
+        const icon = btn.querySelector('i');
+        icon.className = 'bi bi-check';
+        btn.style.color = 'var(--iris-success)';
+        showToast('success', 'Copiato!', `Codice ${code} copiato negli appunti`);
+        setTimeout(() => {
+            icon.className = 'bi bi-copy';
+            btn.style.color = '';
+        }, 2000);
+    }).catch(() => {
+        showToast('error', 'Errore', 'Impossibile copiare il codice');
+    });
+}
+
+// =====================================================================
 // DASHBOARD
 // =====================================================================
 async function loadDashboard() {
@@ -656,7 +869,10 @@ async function loadDashboard() {
     document.getElementById('foldersGrid').style.display = 'none';
     document.getElementById('emptyFolders').style.display = 'none';
     try {
-        const res = await fetch('/api/folders');
+        const url = activeWorkspaceId
+            ? `/api/folders?workspace_id=${activeWorkspaceId}`
+            : '/api/folders';
+        const res = await fetch(url);
         if (res.status === 401) { window.location.href = '/login'; return; }
         if (!res.ok) throw new Error('Server error');
         allFolders = await res.json();
@@ -718,7 +934,11 @@ function showDashboard() {
     document.getElementById('dashboardView').style.display = 'block';
     document.getElementById('folderView').style.display = 'none';
     document.getElementById('uploadTriggerBtn').style.display = 'none';
-    document.getElementById('topbarTitle').innerHTML = 'Dashboard <span>— Le tue cartelle</span>';
+    const wsLabel = activeWorkspaceName ? `— ${escapeHtml(activeWorkspaceName)}` : '— Le tue cartelle';
+    document.getElementById('topbarTitle').innerHTML = `Dashboard <span>${wsLabel}</span>`;
+    // Update page title
+    const ptitle = document.getElementById('pageTitle');
+    if (ptitle) ptitle.textContent = activeWorkspaceName || 'Le tue cartelle';
 }
 
 function refreshAll() {
@@ -845,8 +1065,10 @@ async function createFolder() {
     const password = document.getElementById('newFolderPassword').value;
     if (!name) { showToast('warning', 'Attenzione', 'Inserisci un nome per la cartella'); return; }
     if (isEncrypted && !password) { showToast('warning', 'Attenzione', 'Inserisci una password per la cartella cifrata'); return; }
+    const payload = {name, description, is_encrypted: isEncrypted, password};
+    if (activeWorkspaceId) payload.workspace_id = activeWorkspaceId;
     try {
-        const res = await fetch('/api/folders', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name, description, is_encrypted: isEncrypted, password}) });
+        const res = await fetch('/api/folders', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
         const data = await res.json();
         if (data.success) { closeModal(); showToast('success', 'Cartella creata', `"${name}" creata con successo`); loadDashboard(); }
         else { showToast('error', 'Errore', data.message || 'Impossibile creare la cartella'); }
@@ -1001,7 +1223,8 @@ async function uploadSingleFile(file) {
 // =====================================================================
 async function loadStats() {
     try {
-        const res = await fetch('/api/stats');
+        const url = activeWorkspaceId ? `/api/stats?workspace_id=${activeWorkspaceId}` : '/api/stats';
+        const res = await fetch(url);
         if (!res.ok) return;
         const d = await res.json();
         document.getElementById('statFolders').textContent = d.folders ?? '—';

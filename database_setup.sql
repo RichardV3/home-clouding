@@ -1,142 +1,253 @@
--- IRIS-VE v2.0 Database Setup Script
--- Apple-Inspired Cloud Storage System
--- Versione: 2.0.0
--- Data: 22 Settembre 2025
+-- ============================================================================
+-- IRIS-VE v3.0 Database Setup Script
+-- Multi-user Cloud Storage with Organizations & Workspaces
+-- Versione: 3.0.0 — Data: 2026-03-24
+-- ============================================================================
 
 -- Creazione database (se non esiste)
-CREATE DATABASE IF NOT EXISTS python 
-CHARACTER SET utf8mb4 
+CREATE DATABASE IF NOT EXISTS iris_ve
+CHARACTER SET utf8mb4
 COLLATE utf8mb4_unicode_ci;
 
-USE python;
+USE iris_ve;
 
 -- Impostazioni ottimizzazione
 SET sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO';
 SET time_zone = '+00:00';
 
--- =======================
--- TABELLE PRINCIPALI
--- =======================
+-- ============================================================================
+-- TABELLE UTENTI E ACCESSO
+-- ============================================================================
 
--- Tabella cartelle normali (migliorata)
-CREATE TABLE IF NOT EXISTS folder (
+-- Tabella utenti (registrazione multi-utente)
+CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    created_by VARCHAR(100) NOT NULL DEFAULT 'irisve-cloud',
+    username VARCHAR(80) NOT NULL UNIQUE,
+    email VARCHAR(120) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    description TEXT,
-    is_public BOOLEAN DEFAULT FALSE,
-    access_count INT DEFAULT 0,
-    last_accessed DATETIME NULL,
-    color VARCHAR(7) DEFAULT '#007AFF',
-    icon VARCHAR(64) DEFAULT 'bi-folder-fill',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    -- Indici per performance
-    INDEX idx_folder_name (name),
-    INDEX idx_folder_created_at (created_at DESC),
-    INDEX idx_folder_access_count (access_count DESC),
-    INDEX idx_folder_public (is_public)
+    INDEX ix_users_username (username),
+    INDEX ix_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Tabella cartelle crittografate (migliorata)
-CREATE TABLE IF NOT EXISTS encrypted_folders (
+-- ============================================================================
+-- TABELLE ORGANIZZAZIONI E WORKSPACE
+-- ============================================================================
+
+-- Tabella organizzazioni/aziende
+CREATE TABLE IF NOT EXISTS organizations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    encrypted_content TEXT NOT NULL,
-    salt VARCHAR(64) NOT NULL,
+    address TEXT,
+    phone VARCHAR(20),
+    invite_code VARCHAR(6) NOT NULL UNIQUE,
+    owner_id INT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    access_count INT DEFAULT 0,
-    last_accessed DATETIME NULL,
-    password_hint VARCHAR(255),
-    color VARCHAR(7) DEFAULT '#FF9500',
 
-    -- Indici per performance
-    INDEX idx_enc_folder_name (name),
-    INDEX idx_enc_folder_created_at (created_at DESC),
-    INDEX idx_enc_folder_access_count (access_count DESC)
+    INDEX ix_organizations_invite_code (invite_code),
+    INDEX ix_organizations_owner (owner_id),
+    CONSTRAINT fk_org_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Tabella file (notevolmente migliorata)
-CREATE TABLE IF NOT EXISTS file (
+-- Tabella membri organizzazione (relazione user ↔ organization)
+CREATE TABLE IF NOT EXISTS organization_members (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    organization_id INT NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'member',  -- 'owner' | 'member'
+    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uq_user_org (user_id, organization_id),
+    INDEX ix_org_members_user (user_id),
+    INDEX ix_org_members_org (organization_id),
+    CONSTRAINT fk_om_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_om_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabella workspace (uno per organizzazione — auto-creato alla creazione org)
+CREATE TABLE IF NOT EXISTS workspaces (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    organization_id INT NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_ws_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================================
+-- TABELLE STORAGE (CARTELLE E FILE)
+-- ============================================================================
+
+-- Cartelle normali e cifrate
+CREATE TABLE IF NOT EXISTS folders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    icon VARCHAR(64) DEFAULT 'bi-folder-fill',
+    is_encrypted BOOLEAN DEFAULT FALSE,
+    password_hash VARCHAR(255),
+    salt VARCHAR(255),
+    workspace_id INT NULL DEFAULT NULL,       -- NULL = cartella personale
+    created_by_id INT NULL DEFAULT NULL,      -- NULL = legacy (prima della v3.0)
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX ix_folders_name (name),
+    INDEX ix_folders_workspace_id (workspace_id),
+    INDEX ix_folders_created_by_id (created_by_id),
+    INDEX ix_folders_created_at (created_at DESC),
+
+    CONSTRAINT fk_folder_workspace FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE SET NULL,
+    CONSTRAINT fk_folder_creator FOREIGN KEY (created_by_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- File caricati
+CREATE TABLE IF NOT EXISTS files (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    folder_id INT NOT NULL,
     name VARCHAR(255) NOT NULL,
     original_name VARCHAR(255),
     size BIGINT NOT NULL,
-    uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    folder_id INT NULL,
-    enc_id INT NULL,
-    file_hash VARCHAR(64),
     mime_type VARCHAR(100),
-    download_count INT DEFAULT 0,
-    last_modified DATETIME NULL,
-    tags TEXT,
-    preview_available BOOLEAN DEFAULT FALSE,
+    file_path VARCHAR(512) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    is_encrypted BOOLEAN DEFAULT FALSE,
+    uploaded_by_id INT NULL DEFAULT NULL,
 
-    -- Indici per performance
-    INDEX idx_file_name (name),
-    INDEX idx_file_uploaded_at (uploaded_at DESC),
-    INDEX idx_file_hash (file_hash),
-    INDEX idx_file_size (size DESC),
-    INDEX idx_file_mime_type (mime_type),
-    INDEX idx_file_download_count (download_count DESC),
+    INDEX ix_files_folder_id (folder_id),
+    INDEX ix_files_name (name),
+    INDEX ix_files_uploaded_at (created_at DESC),
+    INDEX ix_files_size (size DESC),
+    INDEX ix_files_uploaded_by_id (uploaded_by_id),
 
-    -- Chiavi esterne con cascade
-    FOREIGN KEY (folder_id) REFERENCES folder(id) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (enc_id) REFERENCES encrypted_folders(id) ON DELETE CASCADE ON UPDATE CASCADE,
-
-    -- Constraint per integrità
-    CONSTRAINT chk_file_folder CHECK (
-        (folder_id IS NOT NULL AND enc_id IS NULL) OR 
-        (folder_id IS NULL AND enc_id IS NOT NULL)
-    )
+    CONSTRAINT fk_file_folder FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_file_uploader FOREIGN KEY (uploaded_by_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- =======================
--- TABELLE AUDIT E ANALYTICS
--- =======================
+-- ============================================================================
+-- AUDIT E ANALYTICS
+-- ============================================================================
 
--- Tabella audit logs per sicurezza
-CREATE TABLE IF NOT EXISTS audit_logs (
+-- Audit log sicurezza e attività
+CREATE TABLE IF NOT EXISTS action_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    user_ip VARCHAR(45) NOT NULL,
-    action VARCHAR(100) NOT NULL,
+    action VARCHAR(50) NOT NULL,
     resource_type VARCHAR(50),
-    resource_id INT,
+    folder_id INT NULL,
+    file_id INT NULL,
     details TEXT,
+    ip_address VARCHAR(50),
+    user_agent VARCHAR(255),
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    user_agent VARCHAR(500),
 
-    -- Indici per query veloci
-    INDEX idx_audit_timestamp (timestamp DESC),
-    INDEX idx_audit_user_ip (user_ip),
-    INDEX idx_audit_action (action),
-    INDEX idx_audit_resource (resource_type, resource_id),
-    INDEX idx_audit_date (DATE(timestamp))
+    INDEX ix_action_logs_timestamp (timestamp DESC),
+    INDEX ix_action_logs_folder_id (folder_id),
+    INDEX ix_action_logs_action (action),
+
+    CONSTRAINT fk_log_folder FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE,
+    CONSTRAINT fk_log_file FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Tabella statistiche sistema giornaliere
-CREATE TABLE IF NOT EXISTS system_stats (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    date DATE NOT NULL UNIQUE,
-    total_uploads INT DEFAULT 0,
-    total_downloads INT DEFAULT 0,
-    total_folders_created INT DEFAULT 0,
-    total_encrypted_folders_created INT DEFAULT 0,
-    disk_usage_bytes BIGINT DEFAULT 0,
-    active_users INT DEFAULT 0,
-    avg_response_time FLOAT DEFAULT 0.0,
+-- ============================================================================
+-- VIEWS PER ANALYTICS
+-- ============================================================================
 
-    -- Indici per analytics
-    INDEX idx_stats_date (date DESC),
-    INDEX idx_stats_uploads (total_uploads DESC),
-    INDEX idx_stats_disk_usage (disk_usage_bytes DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Vista statistiche cartelle per workspace
+CREATE OR REPLACE VIEW v_workspace_stats AS
+SELECT
+    w.id AS workspace_id,
+    o.name AS org_name,
+    COUNT(DISTINCT f.id) AS total_folders,
+    COUNT(DISTINCT fi.id) AS total_files,
+    COALESCE(SUM(fi.size), 0) AS total_size_bytes,
+    MAX(f.created_at) AS last_folder_created
+FROM workspaces w
+JOIN organizations o ON w.organization_id = o.id
+LEFT JOIN folders f ON f.workspace_id = w.id
+LEFT JOIN files fi ON fi.folder_id = f.id
+GROUP BY w.id, o.name;
 
--- =======================
--- TABELLE CACHE E PERFORMANCE
--- =======================
+-- Vista statistiche utente
+CREATE OR REPLACE VIEW v_user_stats AS
+SELECT
+    u.id AS user_id,
+    u.username,
+    COUNT(DISTINCT f.id) AS personal_folders,
+    COUNT(DISTINCT fi.id) AS total_files,
+    COALESCE(SUM(fi.size), 0) AS total_size_bytes,
+    COUNT(DISTINCT om.organization_id) AS org_count
+FROM users u
+LEFT JOIN folders f ON f.created_by_id = u.id AND f.workspace_id IS NULL
+LEFT JOIN files fi ON fi.uploaded_by_id = u.id
+LEFT JOIN organization_members om ON om.user_id = u.id
+GROUP BY u.id, u.username;
 
--- Tabella cache per query frequenti
+-- Vista audit summary (ultimi 30 giorni)
+CREATE OR REPLACE VIEW v_daily_audit_summary AS
+SELECT
+    DATE(timestamp) AS audit_date,
+    COUNT(*) AS total_actions,
+    COUNT(DISTINCT ip_address) AS unique_ips,
+    action,
+    COUNT(*) AS action_count
+FROM action_logs
+WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+GROUP BY DATE(timestamp), action
+ORDER BY audit_date DESC, action_count DESC;
+
+-- ============================================================================
+-- STORED PROCEDURES
+-- ============================================================================
+
+DROP PROCEDURE IF EXISTS CleanupOldData;
+DELIMITER //
+CREATE PROCEDURE CleanupOldData()
+BEGIN
+    DELETE FROM action_logs WHERE timestamp < DATE_SUB(NOW(), INTERVAL 30 DAY);
+    DELETE FROM query_cache WHERE expires_at < NOW();
+    ANALYZE TABLE folders, files, action_logs, users, organizations;
+    SELECT 'Cleanup completato' AS status;
+END //
+DELIMITER ;
+
+DROP PROCEDURE IF EXISTS GetSystemOverview;
+DELIMITER //
+CREATE PROCEDURE GetSystemOverview()
+BEGIN
+    SELECT
+        (SELECT COUNT(*) FROM users) AS total_users,
+        (SELECT COUNT(*) FROM organizations) AS total_orgs,
+        (SELECT COUNT(*) FROM workspaces) AS total_workspaces,
+        (SELECT COUNT(*) FROM folders) AS total_folders,
+        (SELECT COUNT(*) FROM files) AS total_files,
+        (SELECT COALESCE(SUM(size), 0) FROM files) AS total_size_bytes,
+        NOW() AS generated_at;
+END //
+DELIMITER ;
+
+-- ============================================================================
+-- TRIGGERS
+-- ============================================================================
+
+DROP TRIGGER IF EXISTS audit_file_deletion;
+DELIMITER //
+CREATE TRIGGER audit_file_deletion
+AFTER DELETE ON files
+FOR EACH ROW
+BEGIN
+    INSERT INTO action_logs (action, resource_type, details, ip_address)
+    VALUES ('file_deleted', 'file',
+            CONCAT('File: ', OLD.name, ', Size: ', OLD.size),
+            'system');
+END //
+DELIMITER ;
+
+-- ============================================================================
+-- TABELLA CACHE (opzionale — usata da Flask-Caching se configurato con DB)
+-- ============================================================================
+
 CREATE TABLE IF NOT EXISTS query_cache (
     id INT AUTO_INCREMENT PRIMARY KEY,
     cache_key VARCHAR(255) NOT NULL UNIQUE,
@@ -149,241 +260,38 @@ CREATE TABLE IF NOT EXISTS query_cache (
     INDEX idx_cache_expires (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- =======================
--- VIEWS PER ANALYTICS
--- =======================
-
--- Vista per statistiche cartelle
-CREATE OR REPLACE VIEW folder_stats AS
-SELECT 
-    'normal' as folder_type,
-    COUNT(*) as total_count,
-    AVG(access_count) as avg_access_count,
-    MAX(created_at) as latest_creation,
-    SUM(CASE WHEN is_public = TRUE THEN 1 ELSE 0 END) as public_count
-FROM folder
-UNION ALL
-SELECT 
-    'encrypted' as folder_type,
-    COUNT(*) as total_count,
-    AVG(access_count) as avg_access_count,
-    MAX(created_at) as latest_creation,
-    0 as public_count
-FROM encrypted_folders;
-
--- Vista per statistiche file
-CREATE OR REPLACE VIEW file_stats AS
-SELECT 
-    CASE 
-        WHEN folder_id IS NOT NULL THEN 'normal'
-        WHEN enc_id IS NOT NULL THEN 'encrypted'
-    END as file_type,
-    COUNT(*) as total_files,
-    SUM(size) as total_size_bytes,
-    AVG(size) as avg_size_bytes,
-    SUM(download_count) as total_downloads,
-    COUNT(DISTINCT CASE 
-        WHEN folder_id IS NOT NULL THEN folder_id 
-        WHEN enc_id IS NOT NULL THEN enc_id 
-    END) as unique_folders
-FROM file
-WHERE folder_id IS NOT NULL OR enc_id IS NOT NULL
-GROUP BY file_type;
-
--- Vista per audit summary
-CREATE OR REPLACE VIEW daily_audit_summary AS
-SELECT 
-    DATE(timestamp) as audit_date,
-    COUNT(*) as total_actions,
-    COUNT(DISTINCT user_ip) as unique_users,
-    COUNT(DISTINCT action) as unique_actions,
-    action as most_common_action,
-    COUNT(*) as action_count
-FROM audit_logs 
-WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-GROUP BY DATE(timestamp), action
-ORDER BY audit_date DESC, action_count DESC;
-
--- =======================
--- STORED PROCEDURES
--- =======================
-
--- Procedura per cleanup automatico
-DELIMITER //
-CREATE PROCEDURE IF NOT EXISTS CleanupOldData()
-BEGIN
-    -- Cleanup audit logs più vecchi di 30 giorni
-    DELETE FROM audit_logs 
-    WHERE timestamp < DATE_SUB(NOW(), INTERVAL 30 DAY);
-
-    -- Cleanup statistiche più vecchie di 1 anno
-    DELETE FROM system_stats 
-    WHERE date < DATE_SUB(CURDATE(), INTERVAL 1 YEAR);
-
-    -- Cleanup cache scaduta
-    DELETE FROM query_cache 
-    WHERE expires_at < NOW();
-
-    -- Ottimizzazione tabelle
-    ANALYZE TABLE folder, encrypted_folders, file, audit_logs;
-
-    SELECT 'Cleanup completato' as status;
-END //
-DELIMITER ;
-
--- Procedura per statistiche rapide
-DELIMITER //
-CREATE PROCEDURE IF NOT EXISTS GetSystemOverview()
-BEGIN
-    DECLARE total_folders INT DEFAULT 0;
-    DECLARE total_encrypted_folders INT DEFAULT 0;
-    DECLARE total_files INT DEFAULT 0;
-    DECLARE total_size BIGINT DEFAULT 0;
-    DECLARE total_downloads INT DEFAULT 0;
-
-    SELECT COUNT(*) INTO total_folders FROM folder;
-    SELECT COUNT(*) INTO total_encrypted_folders FROM encrypted_folders;
-    SELECT COUNT(*), COALESCE(SUM(size), 0), COALESCE(SUM(download_count), 0) 
-    INTO total_files, total_size, total_downloads FROM file;
-
-    SELECT 
-        total_folders,
-        total_encrypted_folders,
-        total_files,
-        total_size,
-        total_downloads,
-        NOW() as generated_at;
-END //
-DELIMITER ;
-
--- =======================
--- TRIGGERS PER AUTOMAZIONE
--- =======================
-
--- Trigger per aggiornamento automatico last_accessed su folder
-DELIMITER //
-CREATE TRIGGER IF NOT EXISTS update_folder_access 
-BEFORE UPDATE ON folder
-FOR EACH ROW
-BEGIN
-    IF NEW.access_count > OLD.access_count THEN
-        SET NEW.last_accessed = NOW();
-    END IF;
-END //
-DELIMITER ;
-
--- Trigger per aggiornamento automatico last_accessed su encrypted_folders
-DELIMITER //
-CREATE TRIGGER IF NOT EXISTS update_encrypted_folder_access 
-BEFORE UPDATE ON encrypted_folders
-FOR EACH ROW
-BEGIN
-    IF NEW.access_count > OLD.access_count THEN
-        SET NEW.last_accessed = NOW();
-    END IF;
-END //
-DELIMITER ;
-
--- Trigger per audit automatico su eliminazione file
-DELIMITER //
-CREATE TRIGGER IF NOT EXISTS audit_file_deletion 
-AFTER DELETE ON file
-FOR EACH ROW
-BEGIN
-    INSERT INTO audit_logs (user_ip, action, resource_type, resource_id, details)
-    VALUES ('system', 'file_deleted', 'file', OLD.id, 
-            CONCAT('File: ', OLD.name, ', Size: ', OLD.size));
-END //
-DELIMITER ;
-
--- =======================
--- DATI DI ESEMPIO (OPZIONALI)
--- =======================
-
--- Inserimento statistiche iniziali
-INSERT IGNORE INTO system_stats (date, total_uploads, total_downloads, total_folders_created, total_encrypted_folders_created)
-VALUES (CURDATE(), 0, 0, 0, 0);
-
--- =======================
+-- ============================================================================
 -- OTTIMIZZAZIONI DATABASE
--- =======================
+-- ============================================================================
 
--- Configurazioni MySQL ottimizzate per IRIS-VE
-SET GLOBAL innodb_buffer_pool_size = 134217728;  -- 128MB
-SET GLOBAL query_cache_size = 67108864;          -- 64MB
-SET GLOBAL query_cache_type = ON;
+SET GLOBAL innodb_buffer_pool_size = 134217728;   -- 128 MB
 SET GLOBAL max_connections = 100;
-SET GLOBAL innodb_log_file_size = 50331648;      -- 48MB
-SET GLOBAL innodb_flush_log_at_trx_commit = 2;   -- Performance boost
-SET GLOBAL sync_binlog = 0;                      -- Disabilita per performance
-
--- Event scheduler per manutenzione automatica
+SET GLOBAL innodb_flush_log_at_trx_commit = 2;    -- Performance boost
 SET GLOBAL event_scheduler = ON;
 
--- Evento per cleanup automatico giornaliero
+-- Cleanup automatico giornaliero
 CREATE EVENT IF NOT EXISTS daily_cleanup
 ON SCHEDULE EVERY 1 DAY
-STARTS '2025-09-22 02:00:00'
+STARTS (DATE(NOW()) + INTERVAL 1 DAY + INTERVAL 2 HOUR)
 DO CALL CleanupOldData();
 
--- =======================
--- SICUREZZA
--- =======================
-
--- Creazione utente applicazione (raccomandato per produzione)
--- DECOMMENTARE E MODIFICARE PASSWORD IN PRODUZIONE
-/*
-CREATE USER IF NOT EXISTS 'iris_ve_app'@'localhost' IDENTIFIED BY 'PASSWORD_SICURA_QUI';
-GRANT SELECT, INSERT, UPDATE, DELETE ON python.* TO 'iris_ve_app'@'localhost';
-GRANT EXECUTE ON python.* TO 'iris_ve_app'@'localhost';
-FLUSH PRIVILEGES;
-*/
-
--- =======================
+-- ============================================================================
 -- VERIFICA INSTALLAZIONE
--- =======================
+-- ============================================================================
 
--- Test integrità dati
-SELECT 'Verifica integrità database...' as status;
-
--- Conta tabelle create
-SELECT 
-    COUNT(*) as tables_created,
-    GROUP_CONCAT(TABLE_NAME) as table_names
-FROM information_schema.TABLES 
-WHERE TABLE_SCHEMA = 'python' 
-AND TABLE_TYPE = 'BASE TABLE';
-
--- Verifica indici
-SELECT 
+SELECT
     TABLE_NAME,
-    COUNT(*) as index_count
-FROM information_schema.STATISTICS 
-WHERE TABLE_SCHEMA = 'python'
-GROUP BY TABLE_NAME;
+    TABLE_ROWS,
+    ENGINE
+FROM information_schema.TABLES
+WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_TYPE = 'BASE TABLE'
+ORDER BY TABLE_NAME;
 
--- Verifica views
-SELECT 
-    COUNT(*) as views_created,
-    GROUP_CONCAT(TABLE_NAME) as view_names
-FROM information_schema.VIEWS 
-WHERE TABLE_SCHEMA = 'python';
+SELECT
+    'Database IRIS-VE v3.0 configurato con successo!' AS message,
+    NOW() AS timestamp,
+    DATABASE() AS current_database,
+    @@version AS mysql_version;
 
--- Verifica stored procedures
-SELECT 
-    COUNT(*) as procedures_created,
-    GROUP_CONCAT(ROUTINE_NAME) as procedure_names
-FROM information_schema.ROUTINES 
-WHERE ROUTINE_SCHEMA = 'python' 
-AND ROUTINE_TYPE = 'PROCEDURE';
-
--- Test connessione
-SELECT 
-    'Database IRIS-VE v2.0 configurato con successo!' as message,
-    NOW() as timestamp,
-    DATABASE() as current_database,
-    USER() as current_user,
-    @@version as mysql_version;
-
--- Fine script
-SELECT '✅ Installazione database completata - IRIS-VE v2.0 pronto!' as final_status;
+SELECT '✅ Installazione IRIS-VE v3.0 completata!' AS final_status;

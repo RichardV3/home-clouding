@@ -68,8 +68,9 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_size': 20,
-    'pool_timeout': 20,
-    'pool_recycle': 3600,   # Recycle connections every 1 hour (was -1 → stale connections)
+    'max_overflow': 10,
+    'pool_timeout': 30,
+    'pool_recycle': 1800,   # Recycle ogni 30 min (evita connessioni stantie con MySQL wait_timeout)
     'pool_pre_ping': True
 }
 
@@ -96,8 +97,8 @@ ALL_PERMISSIONS = [
 ALL_PERMISSION_KEYS  = [p[0] for p in ALL_PERMISSIONS]
 DEFAULT_MEMBER_PERMS = ['upload_files', 'create_folders', 'view_analytics']
 
-# Cache
-app.config['CACHE_TYPE'] = 'simple'
+# Cache — SimpleCache è thread-safe (Flask-Caching 2.x), adatta per single-process/multi-thread
+app.config['CACHE_TYPE'] = 'SimpleCache'
 app.config['CACHE_DEFAULT_TIMEOUT'] = 300
 
 # Session
@@ -116,10 +117,16 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 # Extensions
 db = SQLAlchemy(app)
 cache = Cache(app)
-limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
+limiter = Limiter(key_func=get_remote_address,
+                  default_limits=["500 per day", "100 per hour"],
+                  default_limits_exempt_when=lambda: request.path == '/health')
 limiter.init_app(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading',
-                    logger=False, engineio_logger=False)
+socketio = SocketIO(app,
+                    cors_allowed_origins=os.environ.get('ALLOWED_ORIGINS', '*'),
+                    async_mode='threading',
+                    logger=False, engineio_logger=False,
+                    ping_timeout=60,
+                    ping_interval=25)
 
 # In-memory presence tracking: {sid: {user_id, username, full_name, folder_id, connected_at}}
 online_users: dict = {}
@@ -509,21 +516,38 @@ def get_local_ip():
         return "127.0.0.1"
 
 
-def get_public_ip():
-    """Get public IP address"""
-    try:
-        response = requests.get('https://api.ipify.org?format=json', timeout=5)
-        return response.json()['ip']
-    except Exception:
+_public_ip_cache: dict = {'ip': None, 'ts': 0}
+_PUBLIC_IP_CACHE_TTL = 300  # 5 minuti
+
+def get_public_ip() -> str:
+    """Get public IP with in-memory cache (5 min TTL) and multiple fallbacks.
+    Never blocks longer than 3 s per attempt."""
+    import time
+    now = time.monotonic()
+    if _public_ip_cache['ip'] and now - _public_ip_cache['ts'] < _PUBLIC_IP_CACHE_TTL:
+        return _public_ip_cache['ip']
+
+    _PROVIDERS = [
+        ('https://api.ipify.org?format=json', lambda r: r.json()['ip']),
+        ('https://checkip.amazonaws.com',     lambda r: r.text.strip()),
+        ('https://icanhazip.com',              lambda r: r.text.strip()),
+        ('https://ifconfig.me/ip',             lambda r: r.text.strip()),
+    ]
+    for url, extractor in _PROVIDERS:
         try:
-            response = requests.get('https://checkip.amazonaws.com', timeout=5)
-            return response.text.strip()
+            resp = requests.get(url, timeout=3)
+            ip = extractor(resp)
+            if ip:
+                _public_ip_cache['ip'] = ip
+                _public_ip_cache['ts'] = now
+                return ip
         except Exception:
-            return "IP pubblico non rilevato"
+            continue
+    return _public_ip_cache.get('ip') or "IP pubblico non rilevato"
 
 
-def log_action(action, resource_type=None, resource_id=None, details=None):
-    """Log user action"""
+def log_action(action, resource_type=None, resource_id=None, details=None, _commit=True):
+    """Log user action. Pass _commit=False when inside a larger transaction."""
     try:
         log = ActionLog(
             action=action,
@@ -531,13 +555,18 @@ def log_action(action, resource_type=None, resource_id=None, details=None):
             folder_id=resource_id if resource_type == 'folder' else None,
             file_id=resource_id if resource_type == 'file' else None,
             details=details,
-            ip_address=request.remote_addr,
-            user_agent=request.user_agent.string
+            ip_address=request.remote_addr if request else None,
+            user_agent=request.user_agent.string if request and request.user_agent else None,
         )
         db.session.add(log)
-        db.session.commit()
+        if _commit:
+            db.session.commit()
     except Exception as e:
         logger.error(f"Error logging action: {e}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
 
 
 def allowed_file(_filename):
@@ -1202,7 +1231,18 @@ def api_upload_file(folder_id):
         )
 
         db.session.add(db_file)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as db_err:
+            db.session.rollback()
+            # Rimuovi il file dal disco per evitare file orfani
+            try:
+                if os.path.exists(full_path):
+                    os.remove(full_path)
+            except OSError:
+                pass
+            logger.error(f"Upload DB commit error: {db_err}")
+            return jsonify({'success': False, 'message': f'Errore salvataggio nel database: {db_err}'}), 500
 
         cache.delete('all_folders')
         log_action('upload_file', 'file', db_file.id, f'Uploaded: {filename} ({file_size} bytes)')
@@ -1630,7 +1670,7 @@ def api_network_info():
     try:
         local_ip = get_local_ip()
         public_ip = get_public_ip()
-        http_port = int(os.environ.get('EXTERNAL_PORT', 9000))
+        http_port = int(os.environ.get('EXTERNAL_PORT', 25565))
         ftp_port = int(os.environ.get('FTP_PORT', 2121))
         return jsonify({
             'local_ip': local_ip,
@@ -2325,8 +2365,6 @@ if __name__ == '__main__':
     public_ip = get_public_ip()
     http_port = int(os.environ.get('EXTERNAL_PORT', 25565))
     ftp_port = int(os.environ.get('FTP_PORT', 2121))
-
-    print("═" * 80)
     print("🚀 IRIS-VE v2.0 STARTUP")
     print("═" * 80)
     print(f"")

@@ -17,9 +17,11 @@ services:
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 20s
-      retries: 10
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
     networks:
       - iris_network
     restart: unless-stopped
@@ -36,7 +38,9 @@ services:
       FLASK_APP: app.py
       DATABASE_URL: mysql+pymysql://iris_user:iris_password@db:3306/iris_ve
       ENV: production
-      FTP_ENABLED: "False"  # FTP runs in dedicated container below
+      FTP_ENABLED: "False"        # FTP runs in dedicated container below
+      EXTERNAL_PORT: "25565"      # Porta pubblica (port forwarding router)
+      ALLOWED_ORIGINS: "*"        # Cambia con il tuo dominio/IP per produzione
     ports:
       - "5000:5000"
       - "25565:5000"  # Direct external access (router port forwarding)
@@ -49,6 +53,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - iris_network
     restart: unless-stopped
@@ -69,7 +79,14 @@ services:
       # Uncomment when SSL certs are placed in ./ssl/:
       # - ./ssl:/etc/nginx/ssl:ro
     depends_on:
-      - app
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     networks:
       - iris_network
     restart: unless-stopped
@@ -106,7 +123,8 @@ services:
       - iris_network
     restart: unless-stopped
     depends_on:
-      - app
+      db:
+        condition: service_healthy
 
 volumes:
   db_data:

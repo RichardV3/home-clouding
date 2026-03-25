@@ -27,6 +27,35 @@ services:
     restart: unless-stopped
 
   # ============================================================================
+  # MinIO Object Storage (S3-compatible) — opzionale
+  # Console web: http://localhost:9001  (user: minioadmin / pass: minioadmin)
+  # Per usarlo: imposta STORAGE_BACKEND=minio nel file env
+  # ============================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: iris_ve_minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin_secret_change_me
+    ports:
+      - "9000:9000"    # S3 API
+      - "9001:9001"    # Console web
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - iris_network
+    restart: unless-stopped
+    profiles:
+      - minio  # Avvia solo con: docker compose --profile minio up
+
+  # ============================================================================
   # Flask Application
   # ============================================================================
   app:
@@ -38,12 +67,25 @@ services:
       FLASK_APP: app.py
       DATABASE_URL: mysql+pymysql://iris_user:iris_password@db:3306/iris_ve
       ENV: production
-      FTP_ENABLED: "False"        # FTP runs in dedicated container below
-      EXTERNAL_PORT: "25565"      # Porta pubblica (port forwarding router)
-      ALLOWED_ORIGINS: "*"        # Cambia con il tuo dominio/IP per produzione
+      FTP_ENABLED: "False"
+      EXTERNAL_PORT: "25565"
+      ALLOWED_ORIGINS: "*"
+      # ── Storage backend ──────────────────────────────────────────────────────
+      # local   = filesystem (default, retrocompatibile)
+      # minio   = MinIO container sopra
+      # s3      = AWS S3, Cloudflare R2, Backblaze B2 (imposta endpoint/keys)
+      STORAGE_BACKEND: "local"
+      # ── MinIO / S3 (attivi solo se STORAGE_BACKEND != local) ─────────────────
+      S3_ENDPOINT_URL: "http://minio:9000"       # lascia vuoto per AWS S3
+      S3_BUCKET: "iris-ve"
+      S3_ACCESS_KEY: "minioadmin"
+      S3_SECRET_KEY: "minioadmin_secret_change_me"
+      S3_REGION: "us-east-1"
+      S3_PRESIGN_EXPIRY: "3600"
+      # S3_PUBLIC_DOMAIN: "https://cdn.tuodominio.com"  # opzionale: CDN/dominio pubblico
     ports:
       - "5000:5000"
-      - "25565:5000"  # Direct external access (router port forwarding)
+      - "25565:5000"
     volumes:
       - ./uploads:/app/uploads
       - ./backups:/app/backups
@@ -64,8 +106,7 @@ services:
     restart: unless-stopped
 
   # ============================================================================
-  # Nginx Reverse Proxy (HTTP on port 80)
-  # NOTE: SSL disabled — add certs to ./ssl/ and update nginx.conf to enable HTTPS
+  # Nginx Reverse Proxy
   # ============================================================================
   nginx:
     image: nginx:alpine
@@ -92,9 +133,8 @@ services:
     restart: unless-stopped
 
   # ============================================================================
-  # FTP Server (FileZilla access to uploads folder)
-  # Connect via FileZilla: host=YOUR_IP, port=2121, user/pass from env FTP_USER/FTP_PASSWORD
-  # Passive mode: ports 60000-60100 (must be open on router/firewall)
+  # FTP Server
+  # Nota: FTP funziona SOLO con STORAGE_BACKEND=local
   # ============================================================================
   ftp:
     build: .
@@ -128,6 +168,7 @@ services:
 
 volumes:
   db_data:
+  minio_data:  # Persiste i file di MinIO
 
 networks:
   iris_network:

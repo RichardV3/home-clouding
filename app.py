@@ -654,6 +654,217 @@ def sanitize_name(name: str, max_len: int = 255) -> str:
 
 
 # ============================================================================
+# STORAGE BACKEND ABSTRACTION (v4.1)
+# Configurazione via env:
+#   STORAGE_BACKEND = local | minio | s3      (default: local)
+#   S3_ENDPOINT_URL  = http://minio:9000       (MinIO) o ometti per AWS S3
+#   S3_BUCKET        = iris-ve
+#   S3_ACCESS_KEY    = minioadmin
+#   S3_SECRET_KEY    = minioadmin
+#   S3_REGION        = us-east-1
+#   S3_PUBLIC_DOMAIN = https://cdn.example.com (opzionale, per URL pubblici diretti)
+#   S3_PRESIGN_EXPIRY = 3600                   (secondi validità presigned URL)
+# ============================================================================
+
+import abc
+import io
+import tempfile
+import contextlib
+
+class StorageBackend(abc.ABC):
+    """Interfaccia astratta per lo storage dei file."""
+
+    @abc.abstractmethod
+    def save(self, stream, object_key: str) -> None:
+        """Salva uno stream sul backend. object_key = path relativo (es. 'abc123.pdf')"""
+
+    @abc.abstractmethod
+    def delete(self, object_key: str) -> None:
+        """Elimina un oggetto."""
+
+    @abc.abstractmethod
+    def exists(self, object_key: str) -> bool:
+        """Verifica se un oggetto esiste."""
+
+    @abc.abstractmethod
+    def get_size(self, object_key: str) -> int:
+        """Dimensione in byte di un oggetto."""
+
+    @abc.abstractmethod
+    def get_download_url(self, object_key: str, filename: str, expiry: int = 3600):
+        """Restituisce un URL di download diretto (presigned) o None per proxy Flask."""
+
+    @abc.abstractmethod
+    @contextlib.contextmanager
+    def open_temp(self, object_key: str, suffix: str = ''):
+        """Context manager: restituisce il path di un file temporaneo leggibile.
+        Per LocalStorage è il path originale; per S3 scarica e pulisce automaticamente."""
+
+    @property
+    def is_local(self) -> bool:
+        return False
+
+
+class LocalStorage(StorageBackend):
+    """Backend filesystem locale — comportamento originale di IRIS-VE."""
+
+    def __init__(self, base_path: str):
+        self._base = base_path
+
+    def _full(self, key: str) -> str:
+        # Usa sempre il path attivo dal DB (può cambiare con switch disco)
+        return os.path.join(get_upload_folder(), key)
+
+    def save(self, stream, object_key: str) -> None:
+        full = self._full(object_key)
+        os.makedirs(os.path.dirname(full) if '/' in object_key else get_upload_folder(), exist_ok=True)
+        CHUNK = 4 * 1024 * 1024
+        with open(full, 'wb') as f:
+            while True:
+                chunk = stream.read(CHUNK)
+                if not chunk:
+                    break
+                f.write(chunk)
+
+    def delete(self, object_key: str) -> None:
+        full = self._full(object_key)
+        if os.path.exists(full):
+            os.remove(full)
+
+    def exists(self, object_key: str) -> bool:
+        return os.path.exists(self._full(object_key))
+
+    def get_size(self, object_key: str) -> int:
+        return os.path.getsize(self._full(object_key))
+
+    def get_download_url(self, object_key: str, filename: str, expiry: int = 3600):
+        return None  # Flask fa il proxy con send_file
+
+    @contextlib.contextmanager
+    def open_temp(self, object_key: str, suffix: str = ''):
+        yield self._full(object_key)  # path diretto, nessuna copia
+
+    @property
+    def is_local(self) -> bool:
+        return True
+
+
+class S3Storage(StorageBackend):
+    """Backend S3-compatibile: MinIO, Cloudflare R2, Backblaze B2, AWS S3."""
+
+    def __init__(self):
+        import boto3
+        self._bucket   = os.environ['S3_BUCKET']
+        self._expiry   = int(os.environ.get('S3_PRESIGN_EXPIRY', 3600))
+        self._pub_dom  = os.environ.get('S3_PUBLIC_DOMAIN', '').rstrip('/')
+        endpoint       = os.environ.get('S3_ENDPOINT_URL')  # None → AWS S3 standard
+        region         = os.environ.get('S3_REGION', 'us-east-1')
+        kwargs = dict(
+            aws_access_key_id     = os.environ.get('S3_ACCESS_KEY'),
+            aws_secret_access_key = os.environ.get('S3_SECRET_KEY'),
+            region_name           = region,
+        )
+        if endpoint:
+            kwargs['endpoint_url'] = endpoint
+        self._s3 = boto3.client('s3', **kwargs)
+        # Crea bucket se non esiste (utile con MinIO al primo avvio)
+        self._ensure_bucket()
+
+    def _ensure_bucket(self):
+        try:
+            self._s3.head_bucket(Bucket=self._bucket)
+        except Exception:
+            try:
+                self._s3.create_bucket(Bucket=self._bucket)
+                logger.info(f"✅ S3 bucket '{self._bucket}' creato")
+            except Exception as e:
+                logger.warning(f"S3 bucket create: {e}")
+
+    def save(self, stream, object_key: str) -> None:
+        self._s3.upload_fileobj(stream, self._bucket, object_key)
+
+    def delete(self, object_key: str) -> None:
+        try:
+            self._s3.delete_object(Bucket=self._bucket, Key=object_key)
+        except Exception as e:
+            logger.warning(f"S3 delete error: {e}")
+
+    def exists(self, object_key: str) -> bool:
+        try:
+            self._s3.head_object(Bucket=self._bucket, Key=object_key)
+            return True
+        except Exception:
+            return False
+
+    def get_size(self, object_key: str) -> int:
+        try:
+            r = self._s3.head_object(Bucket=self._bucket, Key=object_key)
+            return r['ContentLength']
+        except Exception:
+            return 0
+
+    def get_download_url(self, object_key: str, filename: str, expiry: int = None) -> str:
+        exp = expiry or self._expiry
+        # URL pubblico diretto se S3_PUBLIC_DOMAIN è configurato (CDN, R2 custom domain…)
+        if self._pub_dom:
+            return f"{self._pub_dom}/{object_key}"
+        # Presigned URL — il client scarica direttamente da MinIO/S3 senza passare per Flask
+        try:
+            return self._s3.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': self._bucket,
+                    'Key': object_key,
+                    'ResponseContentDisposition': f'attachment; filename="{filename}"',
+                },
+                ExpiresIn=exp
+            )
+        except Exception as e:
+            logger.error(f"S3 presign error: {e}")
+            return None
+
+    @contextlib.contextmanager
+    def open_temp(self, object_key: str, suffix: str = ''):
+        """Scarica il file in un file temporaneo; pulizia garantita anche in caso di eccezione."""
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        tmp_path = tmp.name
+        try:
+            self._s3.download_fileobj(self._bucket, object_key, tmp)
+            tmp.flush()
+            tmp.close()
+            yield tmp_path
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+# Factory — singleton inizializzato una volta sola
+_storage_instance: StorageBackend = None
+
+def get_storage() -> StorageBackend:
+    """Restituisce il backend storage attivo. Istanza singleton."""
+    global _storage_instance
+    if _storage_instance is not None:
+        return _storage_instance
+
+    backend = os.environ.get('STORAGE_BACKEND', 'local').lower()
+    if backend in ('minio', 's3'):
+        try:
+            _storage_instance = S3Storage()
+            logger.info(f"✅ Storage backend: S3/MinIO (bucket: {os.environ.get('S3_BUCKET')})")
+        except Exception as e:
+            logger.error(f"❌ S3 backend init failed: {e} — fallback a LocalStorage")
+            _storage_instance = LocalStorage(UPLOAD_FOLDER)
+    else:
+        _storage_instance = LocalStorage(UPLOAD_FOLDER)
+        logger.info("✅ Storage backend: LocalStorage (filesystem)")
+
+    return _storage_instance
+
+
+# ============================================================================
 # DISK MANAGEMENT UTILITIES
 # ============================================================================
 
@@ -666,6 +877,7 @@ def get_upload_folder() -> str:
     except Exception:
         pass
     return UPLOAD_FOLDER
+
 
 
 def list_available_disks() -> list:
@@ -1379,15 +1591,24 @@ def api_upload_file(folder_id):
         file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'bin'
         file_path = f"{file_hash}.{file_ext}"
 
-        upload_dir = get_upload_folder()
-        os.makedirs(upload_dir, exist_ok=True)
-        full_path = os.path.join(upload_dir, file_path)
+        storage = get_storage()
+
+        # Notifica inizio upload agli altri utenti nella room
+        socketio.emit('upload_start', {
+            'folder_id': folder_id,
+            'filename': filename,
+            'uploader': user.full_name if user else 'Utente',
+        }, room=f'folder_{folder_id}')
 
         try:
-            file.save(full_path)
-            file_size = os.path.getsize(full_path)
+            storage.save(file.stream, file_path)
+            file_size = storage.get_size(file_path) or (request.content_length or 0)
         except Exception as e:
-            logger.error(f"Upload error: Failed to save file: {e}")
+            try:
+                storage.delete(file_path)
+            except Exception:
+                pass
+            logger.error(f"Upload storage error: {e}")
             return jsonify({'success': False, 'message': f'Errore nel salvataggio: {e}'}), 500
 
         db_file = File(
@@ -1398,7 +1619,7 @@ def api_upload_file(folder_id):
             mime_type=file.content_type or 'application/octet-stream',
             file_path=file_path,
             is_encrypted=folder.is_encrypted,
-            uploaded_by_id=user.id,  # FIX: Was never set in v2.0
+            uploaded_by_id=user.id,
         )
 
         db.session.add(db_file)
@@ -1407,15 +1628,15 @@ def api_upload_file(folder_id):
         except Exception as db_err:
             db.session.rollback()
             try:
-                if os.path.exists(full_path):
-                    os.remove(full_path)
-            except OSError:
+                storage.delete(file_path)
+            except Exception:
                 pass
             logger.error(f"Upload DB commit error: {db_err}")
             return jsonify({'success': False, 'message': f'Errore salvataggio nel database: {db_err}'}), 500
 
         cache.delete('all_folders')
-        log_action('upload_file', 'file', db_file.id, f'Uploaded: {filename} ({file_size} bytes)')
+        log_action('upload_file', 'file', db_file.id,
+                   f'Uploaded: {filename} ({file_size} bytes) via {type(storage).__name__}')
         logger.info(f"File uploaded: {filename} -> {file_path} ({file_size} bytes)")
         socketio.emit('file_uploaded', {'folder_id': folder_id, 'file': db_file.to_dict()},
                       room=f'folder_{folder_id}')
@@ -1431,24 +1652,79 @@ def api_upload_file(folder_id):
 @api_login_required
 @limiter.limit("30 per minute")
 def api_download_file(file_id):
+    """Download con supporto S3 presigned URL, HTTP Range per local, e resume."""
     try:
         user = get_current_user()
         file = File.query.get_or_404(file_id)
 
-        # FIX: Authorization check
         if not _authorize_file_access(file, user):
             return jsonify({'success': False, 'message': 'Accesso negato'}), 403
 
+        storage = get_storage()
+        log_action('download_file', 'file', file_id, f'Downloaded: {file.original_name}')
+
+        # ── S3/MinIO: redirect presigned URL (Flask non è nel mezzo) ──
+        if not storage.is_local:
+            url = storage.get_download_url(
+                file.file_path,
+                file.original_name or file.name,
+                expiry=int(os.environ.get('S3_PRESIGN_EXPIRY', 3600))
+            )
+            if url:
+                from flask import redirect as flask_redirect
+                return flask_redirect(url)
+
+        # ── Local: send_file con HTTP Range (resume support) ──────────
         file_path = os.path.join(get_upload_folder(), file.file_path)
         if not os.path.exists(file_path):
             return jsonify({'success': False, 'message': 'File non trovato'}), 404
 
-        log_action('download_file', 'file', file_id, f'Downloaded: {file.original_name}')
-        return send_file(
-            file_path,
-            as_attachment=True,
-            download_name=file.original_name or file.name,
-        )
+        file_size = os.path.getsize(file_path)
+        range_header = request.headers.get('Range')
+
+        if range_header:
+            import re
+            from flask import Response
+            m = re.match(r'bytes=(\d+)-(\d*)', range_header)
+            if not m:
+                resp = Response(status=416)
+                resp.headers['Content-Range'] = f'bytes */{file_size}'
+                return resp
+            start = int(m.group(1))
+            end   = int(m.group(2)) if m.group(2) else file_size - 1
+            end   = min(end, file_size - 1)
+            length = end - start + 1
+            if start >= file_size or start > end:
+                resp = Response(status=416)
+                resp.headers['Content-Range'] = f'bytes */{file_size}'
+                return resp
+
+            def generate_range():
+                with open(file_path, 'rb') as f:
+                    f.seek(start)
+                    remaining = length
+                    while remaining > 0:
+                        chunk = f.read(min(65536, remaining))
+                        if not chunk:
+                            break
+                        remaining -= len(chunk)
+                        yield chunk
+
+            mime = file.mime_type or 'application/octet-stream'
+            resp = Response(generate_range(), status=206, mimetype=mime, direct_passthrough=True)
+            resp.headers['Content-Range']      = f'bytes {start}-{end}/{file_size}'
+            resp.headers['Accept-Ranges']      = 'bytes'
+            resp.headers['Content-Length']     = str(length)
+            resp.headers['Content-Disposition'] = f'attachment; filename="{file.original_name or file.name}"'
+            return resp
+
+        response = send_file(file_path, as_attachment=True,
+                             download_name=file.original_name or file.name,
+                             mimetype=file.mime_type or 'application/octet-stream')
+        response.headers['Accept-Ranges']  = 'bytes'
+        response.headers['Content-Length'] = str(file_size)
+        return response
+
     except Exception as e:
         logger.error(f"Download error: {e}")
         return jsonify({'success': False, 'message': 'Errore download'}), 500
@@ -1458,46 +1734,32 @@ def api_download_file(file_id):
 @api_login_required
 @limiter.limit("10 per minute")
 def api_delete_file(file_id):
-    """FIX: Delete DB record first, THEN remove from disk (was reversed in v2.0)."""
+    """Elimina file — prima il record DB, poi il file dal backend storage."""
     try:
         user = get_current_user()
         file = File.query.get_or_404(file_id)
 
-        # FIX: Authorization check
         if not _authorize_file_access(file, user):
             return jsonify({'success': False, 'message': 'Accesso negato'}), 403
 
-        # FIX: Check delete permission for workspace folders
-        folder = db.session.get(Folder, file.folder_id)
-        if folder and folder.workspace_id:
-            ws = db.session.get(Workspace, folder.workspace_id)
-            if ws:
-                member = OrganizationMember.query.filter_by(
-                    user_id=user.id, organization_id=ws.organization_id
-                ).first()
-                if member and 'delete_files' not in _get_effective_permissions(member):
-                    return jsonify({'success': False, 'message': 'Non hai il permesso di eliminare file'}), 403
+        object_key   = file.file_path
+        file_name    = file.original_name
+        file_folder  = file.folder_id
+        storage      = get_storage()
 
-        file_path = os.path.join(get_upload_folder(), file.file_path)
-        file_name = file.original_name
-        file_folder_id = file.folder_id
-
-        # FIX: Commit DB FIRST, then remove from disk
         db.session.delete(file)
         db.session.commit()
 
-        # Only after successful commit, remove physical file
+        # Rimuovi dal backend storage DOPO il commit DB
         try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-                logger.info(f"File deleted from disk: {file_path}")
-        except OSError as oe:
-            logger.warning(f"Could not remove file from disk: {file_path} — {oe}")
+            storage.delete(object_key)
+        except Exception as e:
+            logger.warning(f"Storage delete warning: {e}")
 
         cache.delete('all_folders')
         log_action('delete_file', 'file', file_id, f'Deleted: {file_name}')
-        socketio.emit('file_deleted', {'folder_id': file_folder_id, 'file_id': file_id},
-                      room=f'folder_{file_folder_id}')
+        socketio.emit('file_deleted', {'folder_id': file_folder, 'file_id': file_id},
+                      room=f'folder_{file_folder}')
         return jsonify({'success': True, 'message': 'File eliminato'})
     except Exception as e:
         db.session.rollback()
@@ -1508,48 +1770,50 @@ def api_delete_file(file_id):
 @app.route('/api/files/<int:file_id>/preview', methods=['GET'])
 @api_login_required
 def api_file_preview(file_id):
+    """Preview — supporta sia local che S3 (scarica temp per S3)."""
     try:
         user = get_current_user()
         file = File.query.get_or_404(file_id)
-
-        # FIX: Authorization check
         if not _authorize_file_access(file, user):
             return jsonify({'success': False, 'message': 'Accesso negato'}), 403
 
-        file_path = os.path.join(get_upload_folder(), file.file_path)
         filename = file.original_name or file.name
         ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+        storage = get_storage()
 
-        if not os.path.exists(file_path):
-            return jsonify({'type': 'unsupported', 'message': 'File non trovato su disco'}), 404
+        if not storage.exists(file.file_path):
+            return jsonify({'type': 'unsupported', 'message': 'File non trovato nello storage'}), 404
 
+        # Immagini — presigned URL per S3, inline URL per local
         if ext in ('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'avif'):
+            if not storage.is_local:
+                url = storage.get_download_url(file.file_path, filename, expiry=300)
+                return jsonify({'type': 'image', 'url': url or f'/api/files/{file_id}/preview-inline'})
             return jsonify({'type': 'image', 'url': f'/api/files/{file_id}/preview-inline'})
 
+        # Testo / codice / ZIP — scarica in temp se S3
         if ext in ('txt', 'md', 'json', 'xml', 'csv', 'py', 'js', 'ts', 'html',
                    'css', 'sh', 'bash', 'yaml', 'yml', 'toml', 'ini', 'log',
-                   'java', 'c', 'cpp', 'h', 'rs', 'go', 'rb', 'php', 'sql'):
-            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                content = f.read(100_000)
-            return jsonify({'type': 'text', 'content': content, 'ext': ext})
-
-        if ext == 'zip':
-            try:
-                with zipfile.ZipFile(file_path, 'r') as zf:
-                    all_entries = zf.infolist()
-                    total = len(all_entries)
-                    contents = [
-                        {
-                            'name': info.filename,
-                            'size': format_bytes(info.file_size),
-                            'compressed': format_bytes(info.compress_size),
-                            'is_dir': info.filename.endswith('/'),
-                        }
-                        for info in all_entries[:300]
-                    ]
-                return jsonify({'type': 'zip', 'contents': contents, 'total': total})
-            except zipfile.BadZipFile:
-                return jsonify({'type': 'unsupported', 'message': 'Archivio ZIP non valido'})
+                   'java', 'c', 'cpp', 'h', 'rs', 'go', 'rb', 'php', 'sql') or ext == 'zip':
+            with storage.open_temp(file.file_path, suffix=f'.{ext}') as tmp_path:
+                if ext == 'zip':
+                    try:
+                        with zipfile.ZipFile(tmp_path, 'r') as zf:
+                            all_entries = zf.infolist()
+                            total = len(all_entries)
+                            contents = [
+                                {'name': i.filename, 'size': format_bytes(i.file_size),
+                                 'compressed': format_bytes(i.compress_size),
+                                 'is_dir': i.filename.endswith('/')}
+                                for i in all_entries[:300]
+                            ]
+                        return jsonify({'type': 'zip', 'contents': contents, 'total': total})
+                    except zipfile.BadZipFile:
+                        return jsonify({'type': 'unsupported', 'message': 'Archivio ZIP non valido'})
+                else:
+                    with open(tmp_path, 'r', encoding='utf-8', errors='replace') as f:
+                        content = f.read(100000)
+                    return jsonify({'type': 'text', 'content': content, 'ext': ext})
 
         return jsonify({'type': 'unsupported'})
     except Exception as e:
@@ -1560,22 +1824,26 @@ def api_file_preview(file_id):
 @app.route('/api/files/<int:file_id>/preview-inline', methods=['GET'])
 @api_login_required
 def api_file_preview_inline(file_id):
+    """Serve file inline (immagini). Per S3 usa presigned redirect."""
     try:
         user = get_current_user()
         file = File.query.get_or_404(file_id)
-
         if not _authorize_file_access(file, user):
             return jsonify({'success': False, 'message': 'Accesso negato'}), 403
+
+        storage = get_storage()
+        if not storage.is_local:
+            url = storage.get_download_url(file.file_path, file.original_name or file.name, expiry=300)
+            if url:
+                from flask import redirect as flask_redirect
+                return flask_redirect(url)
 
         file_path = os.path.join(get_upload_folder(), file.file_path)
         if not os.path.exists(file_path):
             return jsonify({'success': False, 'message': 'File non trovato'}), 404
-        return send_file(
-            file_path,
-            as_attachment=False,
-            download_name=file.original_name or file.name,
-            mimetype=file.mime_type or 'application/octet-stream',
-        )
+        return send_file(file_path, as_attachment=False,
+                         download_name=file.original_name or file.name,
+                         mimetype=file.mime_type or 'application/octet-stream')
     except Exception as e:
         logger.error(f"Preview inline error: {e}")
         return jsonify({'success': False, 'message': 'Errore'}), 500
@@ -1584,17 +1852,15 @@ def api_file_preview_inline(file_id):
 @app.route('/api/files/<int:file_id>/zip-extract', methods=['GET'])
 @api_login_required
 def api_zip_extract(file_id):
+    """Estrai file da ZIP. Con S3 scarica il ZIP in temp prima."""
     try:
         user = get_current_user()
         file = File.query.get_or_404(file_id)
-
         if not _authorize_file_access(file, user):
             return jsonify({'success': False, 'message': 'Accesso negato'}), 403
 
-        file_path = os.path.join(get_upload_folder(), file.file_path)
         filename = file.original_name or file.name
         ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
-
         if ext != 'zip':
             return jsonify({'success': False, 'message': 'Non è un file ZIP'}), 400
 
@@ -1602,29 +1868,23 @@ def api_zip_extract(file_id):
         if not inner_path or inner_path.endswith('/'):
             return jsonify({'success': False, 'message': 'Percorso non valido'}), 400
 
-        # FIX: Prevent path traversal in ZIP entries
-        if '..' in inner_path or inner_path.startswith('/'):
-            return jsonify({'success': False, 'message': 'Percorso non valido'}), 400
-
-        if not os.path.exists(file_path):
-            return jsonify({'success': False, 'message': 'File non trovato'}), 404
-
-        import io
+        storage = get_storage()
         import mimetypes
-        try:
-            with zipfile.ZipFile(file_path, 'r') as zf:
-                try:
-                    zf.getinfo(inner_path)
-                except KeyError:
-                    return jsonify({'success': False, 'message': 'File non trovato nell\'archivio'}), 404
-                data = zf.read(inner_path)
-        except zipfile.BadZipFile:
-            return jsonify({'success': False, 'message': 'Archivio ZIP non valido'}), 400
+
+        with storage.open_temp(file.file_path, suffix='.zip') as tmp_path:
+            try:
+                with zipfile.ZipFile(tmp_path, 'r') as zf:
+                    try:
+                        zf.getinfo(inner_path)
+                    except KeyError:
+                        return jsonify({'success': False, 'message': 'File non trovato nell\'archivio'}), 404
+                    data = zf.read(inner_path)
+            except zipfile.BadZipFile:
+                return jsonify({'success': False, 'message': 'Archivio ZIP non valido'}), 400
 
         basename = os.path.basename(inner_path)
         mime = mimetypes.guess_type(basename)[0] or 'application/octet-stream'
-        return send_file(io.BytesIO(data), as_attachment=True,
-                         download_name=basename, mimetype=mime)
+        return send_file(io.BytesIO(data), as_attachment=True, download_name=basename, mimetype=mime)
     except Exception as e:
         logger.error(f"ZIP extract error: {e}")
         return jsonify({'success': False, 'message': 'Errore estrazione'}), 500
@@ -2727,3 +2987,6 @@ if __name__ == '__main__':
 # - get_local_ip: aggiunto timeout socket
 # - api_disk_space: usa get_upload_folder() invece del default hardcoded
 # - Division by zero guard in api_disk_space
+# - FIX: api_upload_file, api_download_file, api_delete_file, api_file_preview,
+#   api_file_preview_inline, api_zip_extract e api_excel_save ora usano get_storage()
+

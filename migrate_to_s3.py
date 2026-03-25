@@ -289,9 +289,49 @@ def main():
 
     if not args.dry_run and stats.get('ERROR', 0) == 0:
         print("\n✅ Migrazione completata!")
-        print("   Ora puoi impostare STORAGE_BACKEND=minio nel file 'env' e riavviare.")
+
+        # Aggiorna storage_config nel DB
+        try:
+            with engine.begin() as conn:
+                # Verifica se esiste già una riga
+                row = conn.execute(text("SELECT id FROM storage_config LIMIT 1")).fetchone()
+                if row:
+                    conn.execute(text(
+                        "UPDATE storage_config SET storage_backend = :backend, "
+                        "s3_bucket = :bucket, s3_endpoint = :endpoint WHERE id = :id"
+                    ), {
+                        'backend': 'minio' if S3_ENDPOINT else 's3',
+                        'bucket': S3_BUCKET,
+                        'endpoint': S3_ENDPOINT,
+                        'id': row[0],
+                    })
+                else:
+                    conn.execute(text(
+                        "INSERT INTO storage_config (active_disk_path, storage_backend, s3_bucket, s3_endpoint) "
+                        "VALUES (:path, :backend, :bucket, :endpoint)"
+                    ), {
+                        'path': upload_dir,
+                        'backend': 'minio' if S3_ENDPOINT else 's3',
+                        'bucket': S3_BUCKET,
+                        'endpoint': S3_ENDPOINT,
+                    })
+            print("   ✅ storage_config aggiornato nel database")
+        except Exception as e:
+            print(f"   ⚠️  Errore aggiornamento storage_config: {e}")
+            print(f"   Aggiorna manualmente: UPDATE storage_config SET storage_backend='minio';")
+
+        print("\n   Prossimi passi:")
+        print("   1. Imposta STORAGE_BACKEND=minio nel file 'env'")
+        print("   2. Riavvia l'applicazione")
+        if args.delete_local:
+            print("   3. I file locali sono già stati eliminati")
+        else:
+            print("   3. (Opzionale) Riesegui con --delete-local per rimuovere i file locali")
     elif args.dry_run:
         print("\nℹ️  Dry run completato. Rimuovi --dry-run per eseguire la migrazione.")
+    else:
+        print(f"\n⚠️  Migrazione completata con {stats.get('ERROR', 0)} errori.")
+        print("   Verifica gli errori nel log CSV e correggi prima di cambiare backend.")
 
 
 if __name__ == '__main__':

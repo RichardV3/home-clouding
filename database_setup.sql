@@ -115,9 +115,13 @@ CREATE TABLE IF NOT EXISTS workspaces (
 -- ============================================================================
 
 -- Configurazione disco attivo (riga singola — aggiornata al cambio disco)
+-- v4.1: aggiunto storage_backend per tracciare il backend attivo
 CREATE TABLE IF NOT EXISTS storage_config (
     id INT AUTO_INCREMENT PRIMARY KEY,
     active_disk_path VARCHAR(512) NOT NULL,
+    storage_backend VARCHAR(20) NOT NULL DEFAULT 'local',  -- 'local' | 'minio' | 's3'
+    s3_bucket VARCHAR(255) NULL DEFAULT NULL,
+    s3_endpoint VARCHAR(512) NULL DEFAULT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -271,7 +275,14 @@ DELIMITER //
 CREATE PROCEDURE CleanupOldData()
 BEGIN
     DELETE FROM action_logs WHERE timestamp < DATE_SUB(NOW(), INTERVAL 30 DAY);
-    DELETE FROM query_cache WHERE expires_at < NOW();
+    -- Pulizia cache opzionale (solo se la tabella esiste)
+    IF EXISTS (SELECT 1 FROM information_schema.TABLES
+               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'query_cache') THEN
+        SET @sql = 'DELETE FROM query_cache WHERE expires_at < NOW()';
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
     ANALYZE TABLE folders, files, action_logs, users, organizations;
     SELECT 'Cleanup completato' AS status;
 END //
@@ -328,17 +339,20 @@ CREATE TABLE IF NOT EXISTS query_cache (
 -- ============================================================================
 -- OTTIMIZZAZIONI DATABASE
 -- ============================================================================
+-- NOTA: Le seguenti impostazioni richiedono privilegi SUPER o SYSTEM_VARIABLES_ADMIN.
+-- Eseguile manualmente come DBA se necessario:
+--   SET GLOBAL innodb_buffer_pool_size = 134217728;   -- 128 MB
+--   SET GLOBAL max_connections = 100;
+--   SET GLOBAL innodb_flush_log_at_trx_commit = 2;
+--   SET GLOBAL event_scheduler = ON;
 
-SET GLOBAL innodb_buffer_pool_size = 134217728;   -- 128 MB
-SET GLOBAL max_connections = 100;
-SET GLOBAL innodb_flush_log_at_trx_commit = 2;    -- Performance boost
-SET GLOBAL event_scheduler = ON;
-
--- Cleanup automatico giornaliero
+-- Cleanup automatico giornaliero (richiede event_scheduler = ON)
+-- Verificare che sia attivo: SHOW VARIABLES LIKE 'event_scheduler';
 CREATE EVENT IF NOT EXISTS daily_cleanup
 ON SCHEDULE EVERY 1 DAY
 STARTS (DATE(NOW()) + INTERVAL 1 DAY + INTERVAL 2 HOUR)
-DO CALL CleanupOldData();
+DO
+  DELETE FROM action_logs WHERE timestamp < DATE_SUB(NOW(), INTERVAL 30 DAY);
 
 -- ============================================================================
 -- VERIFICA INSTALLAZIONE
@@ -354,9 +368,9 @@ WHERE TABLE_SCHEMA = DATABASE()
 ORDER BY TABLE_NAME;
 
 SELECT
-    'Database IRIS-VE v4.0 configurato con successo!' AS message,
+    'Database IRIS-VE v4.1 configurato con successo!' AS message,
     NOW() AS timestamp,
     DATABASE() AS current_database,
     @@version AS mysql_version;
 
-SELECT '✅ Installazione IRIS-VE v4.0 completata!' AS final_status;
+SELECT '✅ Installazione IRIS-VE v4.1 completata!' AS final_status;

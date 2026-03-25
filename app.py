@@ -717,7 +717,9 @@ class LocalStorage(StorageBackend):
 
     def save(self, stream, object_key: str) -> None:
         full = self._full(object_key)
-        os.makedirs(os.path.dirname(full) if '/' in object_key else get_upload_folder(), exist_ok=True)
+        parent_dir = os.path.dirname(full)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
         CHUNK = 4 * 1024 * 1024
         with open(full, 'wb') as f:
             while True:
@@ -754,20 +756,23 @@ class S3Storage(StorageBackend):
 
     def __init__(self):
         import boto3
-        self._bucket   = os.environ['S3_BUCKET']
+        self._bucket   = os.environ.get('S3_BUCKET', 'iris-ve')
         self._expiry   = int(os.environ.get('S3_PRESIGN_EXPIRY', 3600))
         self._pub_dom  = os.environ.get('S3_PUBLIC_DOMAIN', '').rstrip('/')
-        endpoint       = os.environ.get('S3_ENDPOINT_URL')  # None → AWS S3 standard
+        endpoint       = os.environ.get('S3_ENDPOINT_URL')
         region         = os.environ.get('S3_REGION', 'us-east-1')
+        access_key     = os.environ.get('S3_ACCESS_KEY')
+        secret_key     = os.environ.get('S3_SECRET_KEY')
+        if not access_key or not secret_key:
+            raise RuntimeError("S3_ACCESS_KEY e S3_SECRET_KEY devono essere impostate nel file 'env'")
         kwargs = dict(
-            aws_access_key_id     = os.environ.get('S3_ACCESS_KEY'),
-            aws_secret_access_key = os.environ.get('S3_SECRET_KEY'),
+            aws_access_key_id     = access_key,
+            aws_secret_access_key = secret_key,
             region_name           = region,
         )
         if endpoint:
             kwargs['endpoint_url'] = endpoint
         self._s3 = boto3.client('s3', **kwargs)
-        # Crea bucket se non esiste (utile con MinIO al primo avvio)
         self._ensure_bucket()
 
     def _ensure_bucket(self):
@@ -1467,19 +1472,19 @@ def api_delete_folder(folder_id):
         folder_name = folder.name
         parent_id = folder.parent_id
 
-        # Collect ALL file paths recursively before deleting
-        disk_paths = _collect_folder_file_paths(folder)
+        # Collect ALL file object keys recursively before deleting
+        object_keys = _collect_folder_object_keys(folder)
 
         db.session.delete(folder)
         db.session.commit()
 
-        # Only after successful commit, remove physical files
-        for path in disk_paths:
+        # Only after successful commit, remove files from storage backend
+        storage = get_storage()
+        for key in object_keys:
             try:
-                if os.path.exists(path):
-                    os.remove(path)
-            except OSError as oe:
-                logger.warning(f"Could not remove file from disk: {path} — {oe}")
+                storage.delete(key)
+            except Exception as oe:
+                logger.warning(f"Could not remove file from storage: {key} — {oe}")
 
         cache.delete('all_folders')
         log_action('delete_folder', 'folder', folder_id, f'Deleted: {folder_name}')
@@ -1498,13 +1503,13 @@ def api_delete_folder(folder_id):
         return jsonify({'success': False, 'message': 'Errore eliminazione'}), 500
 
 
-def _collect_folder_file_paths(folder: Folder) -> list:
-    """FIX: Recursively collect all file disk paths for a folder and its children."""
-    upload_dir = get_upload_folder()
-    paths = [os.path.join(upload_dir, f.file_path) for f in folder.files]
+def _collect_folder_object_keys(folder: Folder) -> list:
+    """Recursively collect all file object_keys (file_path) for a folder and its children.
+    Returns object keys usabili sia con LocalStorage che S3."""
+    keys = [f.file_path for f in folder.files]
     for child in Folder.query.filter_by(parent_id=folder.id).all():
-        paths.extend(_collect_folder_file_paths(child))
-    return paths
+        keys.extend(_collect_folder_object_keys(child))
+    return keys
 
 
 @app.route('/api/folders/<int:folder_id>/files', methods=['GET'])
@@ -1673,6 +1678,14 @@ def api_download_file(file_id):
             if url:
                 from flask import redirect as flask_redirect
                 return flask_redirect(url)
+            # Fallback: proxy tramite Flask (scarica da S3 e serve al client)
+            with storage.open_temp(file.file_path, suffix='') as tmp_path:
+                return send_file(
+                    tmp_path,
+                    as_attachment=True,
+                    download_name=file.original_name or file.name,
+                    mimetype=file.mime_type or 'application/octet-stream',
+                )
 
         # ── Local: send_file con HTTP Range (resume support) ──────────
         file_path = os.path.join(get_upload_folder(), file.file_path)
@@ -2042,10 +2055,25 @@ def health_check():
         db_status = 'ok'
     except Exception:
         db_status = 'error'
-    status = 'ok' if db_status == 'ok' else 'degraded'
+
+    # Check storage backend
+    storage_status = 'ok'
+    storage_type = 'local'
+    try:
+        storage = get_storage()
+        storage_type = 'local' if storage.is_local else 's3'
+        if not storage.is_local:
+            # Verifica connettività S3 con un'operazione leggera
+            storage._s3.head_bucket(Bucket=storage._bucket)
+    except Exception:
+        storage_status = 'error'
+
+    status = 'ok' if db_status == 'ok' and storage_status == 'ok' else 'degraded'
     return jsonify({
         'status': status,
         'database': db_status,
+        'storage': storage_status,
+        'storage_type': storage_type,
         'timestamp': datetime.utcnow().isoformat(),
     }), 200 if status == 'ok' else 503
 
@@ -2102,9 +2130,24 @@ def api_stats():
 @api_login_required
 def api_disk_space():
     try:
+        storage = get_storage()
+        if not storage.is_local:
+            # S3/MinIO: disk_usage non ha senso, restituisci info dal DB
+            from sqlalchemy import func
+            total_size = db.session.query(func.sum(File.size)).scalar() or 0
+            total_files = File.query.count()
+            return jsonify({
+                'storage_backend': 's3',
+                'total_files': total_files,
+                'total_size': total_size,
+                'total_size_human': format_bytes(total_size),
+                'bucket': os.environ.get('S3_BUCKET', 'iris-ve'),
+                'message': 'Storage S3/MinIO — spazio disco locale non applicabile',
+            })
         upload_dir = get_upload_folder()
         total, used, free = shutil.disk_usage(upload_dir)
         return jsonify({
+            'storage_backend': 'local',
             'total': total,
             'used': used,
             'free': free,
@@ -2148,6 +2191,15 @@ def api_network_info():
 @api_login_required
 def api_get_disks():
     try:
+        storage = get_storage()
+        if not storage.is_local:
+            return jsonify({
+                'success': True,
+                'storage_backend': 's3',
+                'bucket': os.environ.get('S3_BUCKET', 'iris-ve'),
+                'disks': [],
+                'message': 'Storage S3/MinIO attivo — gestione dischi non disponibile',
+            })
         disks = list_available_disks()
         if not disks and not PSUTIL_AVAILABLE:
             return jsonify({'success': False, 'message': 'psutil non installato', 'disks': []}), 200
@@ -2169,8 +2221,16 @@ def api_get_disks():
 @api_login_required
 @limiter.limit("5 per minute")
 def api_switch_disk():
-    """Switch active upload disk — moves all files to <new_mountpoint>/IRIS-VE/."""
+    """Switch active upload disk — moves all files to <new_mountpoint>/IRIS-VE/.
+    Disponibile solo con storage backend locale."""
     try:
+        storage = get_storage()
+        if not storage.is_local:
+            return jsonify({
+                'success': False,
+                'message': 'Cambio disco non disponibile con storage S3/MinIO'
+            }), 400
+
         if not PSUTIL_AVAILABLE:
             return jsonify({'success': False, 'message': 'psutil non disponibile'}), 503
 
@@ -2700,12 +2760,17 @@ def api_excel_save(file_id):
         if ext not in ('xlsx', 'xls', 'ods', 'csv', 'xlsm'):
             return jsonify({'success': False, 'message': 'Tipo file non supportato per la modifica'}), 400
 
-        file_path = os.path.join(get_upload_folder(), file.file_path)
+        file_path = file.file_path
         xlsx_bytes = base64.b64decode(b64_data)
-        with open(file_path, 'wb') as f:
-            f.write(xlsx_bytes)
 
-        file.size = os.path.getsize(file_path)
+        storage = get_storage()
+        try:
+            storage.save(io.BytesIO(xlsx_bytes), file_path)
+            file.size = len(xlsx_bytes)
+        except Exception as e:
+            logger.error(f"Excel save storage error: {e}")
+            return jsonify({'success': False, 'message': f'Errore salvataggio: {e}'}), 500
+
         db.session.commit()
 
         log_action('edit_excel', 'file', file_id, f'Excel edited: {filename}')
@@ -2924,18 +2989,30 @@ if __name__ == '__main__':
             print(f"📝 Make sure MySQL is running and database 'iris_ve' exists")
 
     if os.environ.get('FTP_ENABLED', 'False').lower() == 'true':
-        ftp_thread = threading.Thread(target=start_ftp_server, daemon=True)
-        ftp_thread.start()
+        # FTP funziona solo con storage locale
+        _sb = os.environ.get('STORAGE_BACKEND', 'local').lower()
+        if _sb in ('minio', 's3'):
+            print("⚠️  FTP disabilitato: non compatibile con storage S3/MinIO")
+            logger.warning("FTP disabilitato: non compatibile con storage S3/MinIO")
+        else:
+            ftp_thread = threading.Thread(target=start_ftp_server, daemon=True)
+            ftp_thread.start()
 
     local_ip = get_local_ip()
     public_ip = get_public_ip()
     http_port = int(os.environ.get('EXTERNAL_PORT', 25565))
     ftp_port = int(os.environ.get('FTP_PORT', 2121))
+    _sb = os.environ.get('STORAGE_BACKEND', 'local').lower()
     print("🚀 IRIS-VE v2.1 STARTUP")
     print("═" * 80)
     print(f"📍 Local Access:  http://{local_ip}:5000")
     print(f"🌐 Remote Access: http://{public_ip}:{http_port}")
-    print(f"📁 FTP Access:    ftp://{local_ip}:{ftp_port}")
+    if _sb == 'local':
+        print(f"📁 FTP Access:    ftp://{local_ip}:{ftp_port}")
+        print(f"💾 Storage:       LocalStorage ({get_upload_folder()})")
+    else:
+        print(f"💾 Storage:       S3/MinIO (bucket: {os.environ.get('S3_BUCKET', 'iris-ve')})")
+        print(f"   Endpoint:      {os.environ.get('S3_ENDPOINT_URL', 'AWS S3 standard')}")
     print(f"✅ Server pronto!")
     print("═" * 80)
 

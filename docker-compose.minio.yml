@@ -1,0 +1,39 @@
+# ============================================================================
+# IRIS-VE — Docker Compose per MinIO locale
+# ============================================================================
+# Uso:
+#   docker compose up -d          # Avvia MinIO
+#   docker compose down           # Ferma MinIO
+#   docker compose down -v        # Ferma e CANCELLA tutti i dati
+#
+# Console Web MinIO: http://localhost:9001
+# API S3:            http://localhost:9000
+# Credenziali:       minioadmin / minioadmin
+# ============================================================================
+
+version: '3.8'
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: iris-ve-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # API S3 (usata da IRIS-VE)
+      - "9001:9001"   # Console Web (gestione visuale)
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      # I file vengono salvati qui — persiste tra riavvii
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  minio_data:
+    driver: local
